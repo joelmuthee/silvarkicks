@@ -264,6 +264,7 @@ export default {
     if (request.method === "GET" && path === "/api/ig-feed") {
       const username = url.searchParams.get("username");
       const count = Math.min(parseInt(url.searchParams.get("count") || "50", 10), 100);
+      const maxId = url.searchParams.get("max_id") || "";
       if (!username) return json({ error: "username required" }, 400);
 
       const headers = {
@@ -292,8 +293,9 @@ export default {
           followers: user.edge_followed_by?.count,
         };
 
-        // 2. Pull the recent feed
-        const fRes = await fetch(`https://i.instagram.com/api/v1/feed/user/${userId}/?count=${count}`, { headers });
+        // 2. Pull the recent feed (paginated via max_id when provided)
+        const feedUrl = `https://i.instagram.com/api/v1/feed/user/${userId}/?count=${count}${maxId ? `&max_id=${encodeURIComponent(maxId)}` : ""}`;
+        const fRes = await fetch(feedUrl, { headers });
         if (!fRes.ok) return json({ error: `feed fetch ${fRes.status}`, profile }, 502);
         const fData = await fRes.json();
         const items = (fData.items || []).map(m => {
@@ -317,7 +319,13 @@ export default {
           };
         }).filter(it => it.imageUrl);
 
-        return json({ profile, items, count: items.length });
+        return json({
+          profile,
+          items,
+          count: items.length,
+          more_available: !!fData.more_available,
+          next_max_id: fData.next_max_id || null,
+        });
       } catch (err) {
         return json({ error: err.message }, 502);
       }
