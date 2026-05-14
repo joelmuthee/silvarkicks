@@ -531,6 +531,20 @@ html { scrollbar-color: var(--gold) var(--bg); scrollbar-width: thin; }
 .btn-card.primary:hover:not(:disabled) { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 .btn-card:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-card .wa-icon { vertical-align: -3px; margin-right: 6px; }
+.btn-card .ig-icon { vertical-align: -3px; margin-right: 6px; }
+.btn-card.btn-ig {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  padding-left: 14px;
+  padding-right: 14px;
+}
+.btn-card.btn-ig:hover:not(:disabled) {
+  background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  border-color: transparent;
+  color: #fff;
+}
 
 /* ===== INFO ===== */
 .info {
