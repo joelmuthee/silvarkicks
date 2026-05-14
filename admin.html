@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Silvarkicks Store · Admin</title>
+<link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="images/apple-touch-icon.png">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=20">
+<script src="https://www.google.com/recaptcha/enterprise.js?render=6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX" async defer></script>
+</head>
+<body style="background:#f5f5f7;">
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login-wrap">
+  <h1>Silvarkicks Admin</h1>
+  <p>Enter your admin password</p>
+  <div class="field">
+    <label>Password</label>
+    <input id="loginPassword" type="password" autocomplete="current-password">
+  </div>
+  <button class="btn-admin primary" id="loginBtn" style="width:100%">Sign in</button>
+  <p id="loginError" style="color:#b00020;font-size:13px;text-align:center;margin-top:12px;display:none;">Wrong password</p>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" class="admin-wrap" style="display:none;">
+
+  <div class="admin-header">
+    <h1>Silvarkicks Store Admin</h1>
+    <div class="admin-actions">
+      <a class="btn-admin" href="index.html" target="_blank">View site →</a>
+      <button class="btn-admin danger" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+
+  <nav class="admin-nav" id="adminNav">
+    <a href="#addForm" class="admin-nav-cta">+ Add new item</a>
+    <a href="#salesDash">Sales</a>
+    <a href="#invDash">Inventory</a>
+    <a href="#broadcastDash">WhatsApp Marketing</a>
+    <a href="#allItems">All items <span class="admin-nav-count" id="navItemCount"></span></a>
+  </nav>
+
+  <section class="dash" id="salesDash">
+    <h2 class="dash-title">Sales Overview</h2>
+    <div class="kpi-grid" id="kpiGrid"></div>
+    <div class="dash-grid">
+      <div class="dash-card">
+        <h3>Top categories</h3>
+        <div id="topCats" class="cat-bars"></div>
+      </div>
+      <div class="dash-card">
+        <h3>Recent sales</h3>
+        <div id="recentSales" class="recent-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="dash" id="invDash">
+    <h2 class="dash-title">Inventory Overview</h2>
+    <div class="inv-kpi-grid" id="invKpiGrid"></div>
+    <div class="section-divider">Stock levels <span id="invSortLabel">sorted low to high</span></div>
+    <div class="inv-filter-bar filter-pills" id="invFilterBar"></div>
+    <div class="inv-table-wrap">
+      <table class="inv-table" id="invTable">
+        <thead>
+          <tr>
+            <th style="width:50px"></th>
+            <th>Item</th>
+            <th>Category</th>
+            <th>Price</th>
+            <th>Stock by size</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="invTableBody"></tbody>
+      </table>
+    </div>
+    <button class="btn-admin" id="invShowMore" style="display:none;width:100%;margin-top:14px;"></button>
+  </section>
+
+  <section class="dash" id="broadcastDash">
+    <h2 class="dash-title">WhatsApp Marketing</h2>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin:-8px 0 16px;">Pick items, compose a message and send to past buyers. <strong>Manual mode for now</strong>. Clicks open WhatsApp Web pre-filled with the message and the buyer's number.</p>
+
+    <div class="set-form" style="background:#fff;">
+      <div class="field">
+        <label>Subject of the broadcast</label>
+        <input id="broadcastSubject" type="text" placeholder="e.g. New shirts just landed">
+      </div>
+      <div class="field">
+        <label>Items to include in the message <small style="font-weight:400;color:#999;">(optional, search and tap to add)</small></label>
+        <div id="broadcastSelectedItems" class="set-selected-items"></div>
+        <input id="broadcastItemSearch" type="text" placeholder="Search items by name…" style="margin-top:8px;">
+        <div id="broadcastItemPicker" class="set-item-picker"></div>
+      </div>
+      <div class="field">
+        <label>Recipients <small style="font-weight:400;color:#999;">past buyers from your sales history; deselect anyone you don't want to message</small></label>
+        <div id="broadcastRecipients" class="broadcast-recipients"></div>
+      </div>
+      <div class="field">
+        <label>Message preview</label>
+        <textarea id="broadcastPreview" readonly style="min-height:120px;background:var(--bg);font-family:inherit;"></textarea>
+      </div>
+      <div class="admin-actions">
+        <button class="btn-admin gold" id="broadcastStartBtn">Start sending →</button>
+        <button class="btn-admin" id="broadcastCopyBtn">Copy message only</button>
+      </div>
+      <p id="broadcastStatus" style="font-size:13px;color:var(--ink-soft);margin-top:10px;"></p>
+    </div>
+  </section>
+
+  <div class="admin-form" id="addForm">
+    <h2 id="formTitle">Add a new item</h2>
+    <input type="hidden" id="editingId">
+
+    <!-- ⚡ Instagram quick-add (preferred path) -->
+    <div class="ig-quick-add" id="igQuickPanel">
+      <label class="ig-quick-label">
+        <span class="ig-bolt">⚡</span>
+        <span>Paste an Instagram post URL <em>(fastest way to add)</em></span>
+      </label>
+      <p class="ig-quick-help">Auto-fills the image, extra images (carousels) and caption. Works on public IG posts.</p>
+      <div class="ig-quick-row">
+        <input id="igQuickInput" type="url" placeholder="https://www.instagram.com/p/...">
+        <button class="btn-admin gold" id="igQuickBtn" type="button">Fetch from Instagram</button>
+      </div>
+      <p id="igQuickStatus" class="ig-quick-status"></p>
+    </div>
+
+    <div class="manual-divider" id="manualEntryDivider"><span>or add manually below</span></div>
+
+    <div class="field">
+      <label>Main image</label>
+      <input id="imageInput" type="file" accept="image/*">
+      <div id="imagePreview" style="margin-top:10px;"></div>
+      <p style="font-size:12px;color:#999;margin-top:6px;">Square crop recommended · ~1080×1080.</p>
+    </div>
+
+    <div class="field">
+      <label>Additional images <small style="font-weight:400;color:#999;">optional, up to 8. Buyers swipe through them on the card.</small></label>
+      <input id="extraImagesInput" type="file" accept="image/*" multiple>
+      <div id="extraImagesPreview" class="extra-imgs-preview"></div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Item name</label>
+        <input id="nameInput" type="text" placeholder="e.g. Nike Air Force 1 Low" required>
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <select id="categoryInput">
+          <option value="">Select category</option>
+          <option value="Sneakers">Sneakers</option>
+          <option value="Sports/Athletic">Sports/Athletic</option>
+          <option value="Boots">Boots</option>
+          <option value="Loafers">Loafers</option>
+          <option value="Formal">Formal</option>
+          <option value="Heels">Heels</option>
+          <option value="Sandals">Sandals</option>
+          <option value="Slides">Slides</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Description</label>
+      <textarea id="descInput" placeholder="Tap 'Suggest' or write your own..."></textarea>
+      <button class="btn-admin" id="aiBtn" type="button" style="margin-top:8px;">✨ Suggest description</button>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Price (Ksh) <small style="font-weight:400;color:#999;">optional. Leave blank to show "Price on request".</small></label>
+        <input id="priceInput" type="number" min="0" step="50" placeholder="3500">
+      </div>
+      <div class="field">
+        <label>Instagram post URL (optional)</label>
+        <input id="reelInput" type="url" placeholder="https://www.instagram.com/p/...">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Available size <small style="font-weight:400;color:#999;">thrift = one-of-one pair. Tick the pair's size and leave qty as 1, unless you actually have a second identical pair.</small></label>
+
+      <div class="stock-entry-group">
+        <label class="group-label">UK shoe size</label>
+        <div class="stock-entry-row" id="stockUK">
+          <div class="stock-entry-item"><span class="size-lbl">UK4</span><input type="number" min="0" step="1" data-size="UK4" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">UK5</span><input type="number" min="0" step="1" data-size="UK5" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">UK6</span><input type="number" min="0" step="1" data-size="UK6" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">UK7</span><input type="number" min="0" step="1" data-size="UK7" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">UK8</span><input type="number" min="0" step="1" data-size="UK8" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">UK9</span><input type="number" min="0" step="1" data-size="UK9" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">UK10</span><input type="number" min="0" step="1" data-size="UK10" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">UK11</span><input type="number" min="0" step="1" data-size="UK11" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">UK12</span><input type="number" min="0" step="1" data-size="UK12" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">UK13</span><input type="number" min="0" step="1" data-size="UK13" class="stock-qty"></div>
+        </div>
+      </div>
+
+      <div class="stock-entry-group" style="margin-top:10px;">
+        <label class="group-label">Custom sizes <small style="font-weight:400;color:#999;">EU, US or anything not in the UK grid</small></label>
+        <div class="stock-entry-row" id="stockCustom"></div>
+        <button class="btn-admin" id="addCustomSizeBtn" type="button" style="margin-top:8px;">+ Add custom size</button>
+      </div>
+    </div>
+
+    <div class="admin-actions">
+      <button class="btn-admin primary" id="saveBtn">Save item</button>
+      <button class="btn-admin" id="cancelBtn" style="display:none;">Cancel edit</button>
+    </div>
+  </div>
+
+  <div class="section-divider" id="allItems">
+    All items <span id="bagCount">0</span>
+    <button class="btn-admin" style="margin-left:auto;font-size:12px;padding:6px 12px;" onclick="bulkSelectAll()">Select all</button>
+  </div>
+  <div class="admin-search-wrap">
+    <span class="admin-search-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    </span>
+    <input id="adminSearch" type="search" placeholder="Search items by name or category…" autocomplete="off">
+    <span class="admin-search-count" id="adminSearchCount"></span>
+  </div>
+  <div class="bulk-bar" id="bulkActions" style="display:none;">
+    <span><strong id="bulkCount">0</strong> selected</span>
+    <button class="btn-admin" onclick="bulkSetCategory()">Set category</button>
+    <button class="btn-admin danger" onclick="bulkDelete()">Delete</button>
+    <button class="btn-admin" onclick="bulkClear()">Clear</button>
+  </div>
+  <div class="admin-list" id="adminList"></div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- SALE MODAL -->
+<div id="saleModal" class="modal" style="display:none;">
+  <div class="modal-card">
+    <h3 id="saleModalTitle">Record a sale</h3>
+    <p class="sub">Marks this piece sold and optionally saves the buyer's details for future remarketing.</p>
+
+    <div class="field">
+      <label>Size sold</label>
+      <select id="saleSizeInput"></select>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Quantity</label>
+        <input id="saleQtyInput" type="number" min="1" value="1">
+      </div>
+      <div class="field">
+        <label>Sale price (Ksh) <small style="font-weight:400;color:#999;">optional override</small></label>
+        <input id="salePriceInput" type="number" min="0" step="50">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Buyer name <small style="font-weight:400;color:#999;">optional</small></label>
+      <input id="buyerName" type="text" placeholder="e.g. Jane Wanjiru">
+    </div>
+    <div class="field">
+      <label>Buyer phone <small style="font-weight:400;color:#999;">optional</small></label>
+      <input id="buyerPhone" type="tel" placeholder="254712345678">
+    </div>
+    <div class="field">
+      <label>Notes <small style="font-weight:400;color:#999;">optional</small></label>
+      <input id="buyerNotes" type="text" placeholder="Pickup or delivery, payment method...">
+    </div>
+
+    <div class="admin-actions" style="margin-top:18px;">
+      <button class="btn-admin gold" id="saleSaveBtn">Sell with buyer info</button>
+      <button class="btn-admin" id="saleSkipBtn">Skip · just mark sold</button>
+      <button class="btn-admin danger" id="saleCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="admin.js?v=18"></script>
+</body>
+</html>

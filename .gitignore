@@ -1,0 +1,11 @@
+.tmp/
+.tmp_*
+.playwright-mcp/
+.claude/
+.wrangler/
+worker/.wrangler/
+*.log
+.DS_Store
+Thumbs.db
+*.swp
+node_modules/

@@ -1,0 +1,13 @@
+﻿name = "silvarkicks-api"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+account_id = "58685495706b973821d77208248c66fc"
+
+[[kv_namespaces]]
+binding = "BAGS"
+id = "31e7c80b6f9548d6862a6200fbba9e17"
+
+# Auth token is set as a secret, not in this file:
+#   wrangler secret put ADMIN_TOKEN
+
+
