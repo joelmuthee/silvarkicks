@@ -1315,6 +1315,21 @@ body { color: var(--ink); background: var(--bg); }
 
 /* Scrollbar already inherits --gold via the rule earlier in the file */
 
-/* Make sure admin pages stay light-mode regardless of root --bg */
+/* ===========================================================
+   ADMIN PAGE: stays in light mode regardless of root --bg.
+   admin.html sets body style="background:#f5f5f7;" — that's the
+   single hook we use to redefine the palette tokens for the
+   admin tree so every child rule that reads var(--ink) etc.
+   resolves to dark-text-on-light values.
+   =========================================================== */
 body[style*="background:#f5f5f7"],
-body[style*="background: #f5f5f7"] { color: #0a0a0a; }
+body[style*="background: #f5f5f7"] {
+  color: #0a0a0a;
+  --ink: #0a0a0a;
+  --ink-soft: #2c2c2e;
+  --ink-faint: #6e6e73;
+  --bg-card: #ffffff;
+  --line: #e1e1e3;
+  --shadow: 0 1px 2px rgba(13,13,13,0.04), 0 8px 24px rgba(13,13,13,0.06);
+  --shadow-lg: 0 20px 60px rgba(13,13,13,0.12);
+}
