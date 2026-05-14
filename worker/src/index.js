@@ -37,6 +37,51 @@ const b64ToBytes = (b64) => {
   return bytes;
 };
 
+// IG response normalisers — kept module-level so /api/ig-feed can mix sources.
+function extractFromTimelineNode(node) {
+  const shortcode = node.shortcode || node.code;
+  let imageUrls = [];
+  const children = node.edge_sidecar_to_children?.edges || [];
+  if (children.length) {
+    imageUrls = children.map(({ node: c }) => c.display_url || c.image_versions2?.candidates?.[0]?.url).filter(Boolean);
+  } else if (node.display_url) {
+    imageUrls = [node.display_url];
+  } else if (node.image_versions2?.candidates?.length) {
+    imageUrls = [node.image_versions2.candidates[0].url];
+  }
+  const caption = node.edge_media_to_caption?.edges?.[0]?.node?.text || node.caption?.text || "";
+  return {
+    shortcode,
+    imageUrl: imageUrls[0],
+    imageUrls,
+    caption,
+    isCarousel: imageUrls.length > 1,
+    postUrl: `https://www.instagram.com/p/${shortcode}/`,
+    takenAt: node.taken_at_timestamp ? new Date(node.taken_at_timestamp * 1000).toISOString() : (node.taken_at ? new Date(node.taken_at * 1000).toISOString() : null),
+  };
+}
+
+function extractFromFeedItem(m) {
+  const carousel = m.carousel_media || [];
+  let imageUrls = [];
+  if (carousel.length) {
+    imageUrls = carousel.map(c => c.image_versions2?.candidates?.[0]?.url).filter(Boolean);
+  } else if (m.image_versions2?.candidates?.length) {
+    imageUrls = [m.image_versions2.candidates[0].url];
+  }
+  const shortcode = m.code;
+  const caption = m.caption?.text || "";
+  return {
+    shortcode,
+    imageUrl: imageUrls[0],
+    imageUrls,
+    caption,
+    isCarousel: imageUrls.length > 1,
+    postUrl: `https://www.instagram.com/p/${shortcode}/`,
+    takenAt: m.taken_at ? new Date(m.taken_at * 1000).toISOString() : null,
+  };
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -293,38 +338,62 @@ export default {
           followers: user.edge_followed_by?.count,
         };
 
-        // 2. Pull the recent feed (paginated via max_id when provided)
-        const feedUrl = `https://i.instagram.com/api/v1/feed/user/${userId}/?count=${count}${maxId ? `&max_id=${encodeURIComponent(maxId)}` : ""}`;
-        const fRes = await fetch(feedUrl, { headers });
-        if (!fRes.ok) return json({ error: `feed fetch ${fRes.status}`, profile }, 502);
-        const fData = await fRes.json();
-        const items = (fData.items || []).map(m => {
-          const carousel = m.carousel_media || [];
-          let imageUrls = [];
-          if (carousel.length) {
-            imageUrls = carousel.map(c => c.image_versions2?.candidates?.[0]?.url).filter(Boolean);
-          } else if (m.image_versions2?.candidates?.length) {
-            imageUrls = [m.image_versions2.candidates[0].url];
+        // 2. Pull the recent feed. Three strategies, falling back in order:
+        //    a) web_profile_info already embeds `edge_owner_to_timeline_media`
+        //       with the first ~12 posts + a cursor — no extra request needed.
+        //    b) GraphQL `query_hash` ProfileMedia query for pagination beyond
+        //       what's embedded (works unauthenticated, slower to rate-limit
+        //       than the /api/v1/feed/user/ endpoint).
+        //    c) /api/v1/feed/user/<id>/ — most accurate carousel images, but
+        //       hits a 401 wall after a few dozen calls.
+        const qsTail = `?count=${count}${maxId ? `&max_id=${encodeURIComponent(maxId)}` : ""}`;
+        let items = [];
+        let moreAvailable = false;
+        let nextMaxId = null;
+
+        // (a) Embedded timeline from the profile we already have.
+        const embedded = user.edge_owner_to_timeline_media;
+        if (!maxId && embedded?.edges?.length) {
+          items = embedded.edges.map(({ node }) => extractFromTimelineNode(node)).filter(it => it.imageUrl);
+          moreAvailable = !!embedded.page_info?.has_next_page;
+          nextMaxId = embedded.page_info?.end_cursor || null;
+        }
+
+        // (b) GraphQL query for additional pages (uses end_cursor when provided).
+        if (items.length < count && (maxId || moreAvailable)) {
+          const cursor = maxId || nextMaxId;
+          const variables = encodeURIComponent(JSON.stringify({ id: userId, first: count, after: cursor || null }));
+          const gqlRes = await fetch(`https://www.instagram.com/graphql/query/?query_hash=003056d32c2554def87228bc3fd9668a&variables=${variables}`, { headers });
+          if (gqlRes.ok) {
+            const gData = await gqlRes.json();
+            const media = gData?.data?.user?.edge_owner_to_timeline_media;
+            if (media?.edges?.length) {
+              items = items.concat(media.edges.map(({ node }) => extractFromTimelineNode(node)).filter(it => it.imageUrl));
+              moreAvailable = !!media.page_info?.has_next_page;
+              nextMaxId = media.page_info?.end_cursor || null;
+            }
           }
-          const shortcode = m.code;
-          const caption = m.caption?.text || "";
-          return {
-            shortcode,
-            imageUrl: imageUrls[0],
-            imageUrls,
-            caption,
-            isCarousel: imageUrls.length > 1,
-            postUrl: `https://www.instagram.com/p/${shortcode}/`,
-            takenAt: m.taken_at ? new Date(m.taken_at * 1000).toISOString() : null,
-          };
-        }).filter(it => it.imageUrl);
+        }
+
+        // (c) Last resort: /api/v1/feed/user/ for richer carousel data.
+        if (!items.length) {
+          let fRes = await fetch(`https://www.instagram.com/api/v1/feed/user/${userId}/${qsTail}`, { headers });
+          if (!fRes.ok) {
+            fRes = await fetch(`https://i.instagram.com/api/v1/feed/user/${userId}/${qsTail}`, { headers });
+          }
+          if (!fRes.ok) return json({ error: `feed fetch ${fRes.status}`, profile }, 502);
+          const fData = await fRes.json();
+          items = (fData.items || []).map(extractFromFeedItem).filter(it => it.imageUrl);
+          moreAvailable = !!fData.more_available;
+          nextMaxId = fData.next_max_id || null;
+        }
 
         return json({
           profile,
           items,
           count: items.length,
-          more_available: !!fData.more_available,
-          next_max_id: fData.next_max_id || null,
+          more_available: moreAvailable,
+          next_max_id: nextMaxId,
         });
       } catch (err) {
         return json({ error: err.message }, 502);
