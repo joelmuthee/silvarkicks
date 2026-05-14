@@ -1,5 +1,5 @@
 // Silvarkicks Store Admin
-const ADMIN_PASSWORD = 'zAN2dtlmNX8';
+const ADMIN_PASSWORD = 'silvar123';
 const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
 const ADMIN_TOKEN = atob('b0Nxa3VCRTYybExnSnNseUtqVnZCSUtnZHRzZC1uU3RXNWtvNmQxajZJSQ==');
 const SITE_URL = 'https://silvarkicks.essenceautomations.com';
