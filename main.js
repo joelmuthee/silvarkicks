@@ -96,13 +96,40 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
     return (item.sales || []).length > 0;
   }
 
-  function whatsappLink(item) {
-    const phone = (settings.whatsappNumber || '254746262400');
+  function enquireMessage(item, includeImageUrl) {
     const avail = availSizes(item);
     const sizePart = avail.length ? ` (size ${avail.join(', ')})` : '';
     const pricePart = (item.price > 0) ? ` (${fmtPrice(item.price)})` : '';
-    const msg = `Hi Silvarkicks! I'd like to enquire about the *${item.name}*${sizePart}${pricePart} from your catalog.\n\n${item.image}`;
-    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+    const tail = includeImageUrl ? `\n\n${item.image}` : '';
+    return `Hi Silvarkicks! I'd like to enquire about the *${item.name}*${sizePart}${pricePart} from your catalog.${tail}`;
+  }
+
+  function whatsappLink(item) {
+    const phone = (settings.whatsappNumber || '254746262400');
+    return `https://wa.me/${phone}?text=${encodeURIComponent(enquireMessage(item, true))}`;
+  }
+
+  async function tryShareWithImage(item) {
+    // Web Share API w/ files lets the user share the actual photo to WhatsApp
+    // (not just a URL preview). Mobile Chrome/Safari support this; desktop generally doesn't.
+    if (!navigator.canShare || !navigator.share) return false;
+    try {
+      const res = await fetch(item.image, { mode: 'cors' });
+      if (!res.ok) return false;
+      const blob = await res.blob();
+      const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+      const file = new File([blob], `${item.name.replace(/[^a-z0-9]+/gi, '_')}.${ext}`, { type: blob.type });
+      if (!navigator.canShare({ files: [file] })) return false;
+      await navigator.share({
+        files: [file],
+        text: enquireMessage(item, false),
+        title: item.name,
+      });
+      return true;
+    } catch (err) {
+      // User cancelled or share rejected — fall back to opening wa.me
+      return false;
+    }
   }
   function whatsappLinkAll(itemList) {
     const phone = (settings.whatsappNumber || '254746262400');
@@ -424,10 +451,24 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
     if (e.key === 'Escape' && drawer?.classList.contains('open')) closeDrawer();
   });
 
-  // Gallery delegated click for heart buttons
-  gallery.addEventListener('click', e => {
+  // Gallery delegated click for heart buttons + Enquire share-with-image
+  gallery.addEventListener('click', async e => {
     const heart = e.target.closest('[data-action="wishlist"]');
-    if (heart) { e.stopPropagation(); toggleWishlist(heart.dataset.id); }
+    if (heart) { e.stopPropagation(); toggleWishlist(heart.dataset.id); return; }
+
+    const enquire = e.target.closest('.btn-card.primary');
+    if (enquire && !enquire.hasAttribute('aria-disabled')) {
+      const card = e.target.closest('.card');
+      const id = card?.querySelector('[data-id]')?.dataset.id;
+      const item = items.find(i => i.id === id);
+      // Skip Web Share API on desktop — pop the wa.me link in a new tab instead
+      const isMobile = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      if (item && isMobile && navigator.canShare) {
+        e.preventDefault();
+        const shared = await tryShareWithImage(item);
+        if (!shared) window.open(enquire.href, '_blank', 'noopener');
+      }
+    }
   });
 
   // Fade-in-up on scroll (respects prefers-reduced-motion)
