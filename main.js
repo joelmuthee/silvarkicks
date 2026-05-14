@@ -299,8 +299,6 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
       const catBadge = item.category
         ? `<span class="badge-cat">${escapeHtml(item.category)}</span>`
         : '';
-      const units = totalStock(item);
-      const lowStock = !soldOut && units >= 1 && units <= 3;
       const heartOn = wishlist.has(item.id);
       const newBadge = isNew(item) ? '<span class="badge-new">NEW</span>' : '';
       return `

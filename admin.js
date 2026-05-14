@@ -682,22 +682,19 @@ const INV_PAGE_SIZE = 15;
 
 function renderInventory() {
   let totalItems = bags.length;
-  let totalUnits = 0, totalValue = 0, lowStock = 0, outOfStock = 0;
+  let totalValue = 0, available = 0, soldCount = 0;
 
   bags.forEach(bag => {
     const units = totalStock(bag);
-    totalUnits += units;
     totalValue += units * (bag.price || 0);
-    if (units === 0) outOfStock++;
-    else if (units <= 5) lowStock++;
+    if (units === 0) soldCount++; else available++;
   });
 
   document.getElementById('invKpiGrid').innerHTML = [
-    { label: 'Total items', val: totalItems, sub: 'pieces listed', cls: '' },
-    { label: 'Available', val: totalUnits.toLocaleString(), sub: 'still in stock', cls: 'success' },
+    { label: 'Total pairs', val: totalItems, sub: 'listings in catalog', cls: '' },
+    { label: 'Available', val: available, sub: 'pairs still on the shelf', cls: 'success' },
     { label: 'Catalog value', val: fmtKsh(totalValue), sub: 'at listed prices', cls: '' },
-    { label: 'Almost gone', val: lowStock, sub: 'few units left', cls: lowStock > 0 ? 'warn' : '' },
-    { label: 'Sold', val: outOfStock, sub: 'no units remaining', cls: outOfStock > 0 ? 'danger' : '' },
+    { label: 'Sold', val: soldCount, sub: 'walked out', cls: soldCount > 0 ? 'danger' : '' },
   ].map(k => `
     <div class="inv-kpi ${k.cls}">
       <div class="inv-kpi-label">${k.label}</div>
@@ -705,12 +702,12 @@ function renderInventory() {
       <div class="inv-kpi-sub">${k.sub}</div>
     </div>`).join('');
 
-  const attentionBags = bags.filter(b => totalStock(b) <= 5);
+  const soldBags = bags.filter(b => totalStock(b) === 0);
   const filterBar = document.getElementById('invFilterBar');
   if (filterBar) {
     filterBar.innerHTML = `
       <button class="pill ${invFilter==='attention'?'active':''}" data-inv-filter="attention">
-        Almost gone / sold <span class="admin-nav-count">${attentionBags.length}</span>
+        Sold <span class="admin-nav-count">${soldBags.length}</span>
       </button>
       <button class="pill ${invFilter==='all'?'active':''}" data-inv-filter="all">
         All items <span class="admin-nav-count">${bags.length}</span>
@@ -725,7 +722,7 @@ function renderInventory() {
     });
   }
 
-  const filtered = (invFilter === 'attention' ? attentionBags : bags)
+  const filtered = (invFilter === 'attention' ? soldBags : bags)
     .slice()
     .sort((a, b) => totalStock(a) - totalStock(b));
 
@@ -741,13 +738,13 @@ function renderInventory() {
     const stockEntries = Object.entries(bag.stock || {});
     const stockCells = stockEntries.length
       ? stockEntries.map(([sz, q]) => {
-          const cls = q === 0 ? 'zero' : q <= 3 ? 'low' : 'ok';
+          const cls = q === 0 ? 'zero' : 'ok';
           return `<span class="stock-cell ${cls}">${escapeHtml(sz)}: ${q}</span>`;
         }).join('')
       : '<span style="color:#999;font-size:12px;">No sizes set</span>';
 
-    const statusCls = units === 0 ? 'zero' : units <= 3 ? 'low' : 'ok';
-    const statusLabel = units === 0 ? 'Sold' : units <= 3 ? 'Almost gone' : 'Available';
+    const statusCls = units === 0 ? 'zero' : 'ok';
+    const statusLabel = units === 0 ? 'Sold' : 'Available';
 
     return `
     <tr>
@@ -765,7 +762,7 @@ function renderInventory() {
         <button class="restock-btn" onclick="editItem('${bag.id}')">Edit sizes</button>
       </td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink-faint);">${invFilter === 'attention' ? 'No items are almost gone or sold yet.' : 'No items yet.'}</td></tr>`;
+  }).join('') || `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink-faint);">${invFilter === 'attention' ? 'No pairs sold yet.' : 'No pairs in catalog yet.'}</td></tr>`;
 
   const toggle = document.getElementById('invShowMore');
   if (toggle) {
