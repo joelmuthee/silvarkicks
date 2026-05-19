@@ -37,6 +37,20 @@ const b64ToBytes = (b64) => {
   return bytes;
 };
 
+// Decode HTML entities IG slathers across og:description and the embed Caption
+// div. Named entities + decimal (&#064;) + hex (&#x40;). Without this, captions
+// contain literal "&#064;" instead of "@", which breaks admin's @<price> parser.
+const decodeEntities = (s) => (s || "")
+  .replace(/&amp;/g, "&")
+  .replace(/&quot;/g, '"')
+  .replace(/&#39;/g, "'")
+  .replace(/&apos;/g, "'")
+  .replace(/&lt;/g, "<")
+  .replace(/&gt;/g, ">")
+  .replace(/&nbsp;/g, " ")
+  .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+  .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)));
+
 // IG response normalisers — kept module-level so /api/ig-feed can mix sources.
 function extractFromTimelineNode(node) {
   const shortcode = node.shortcode || node.code;
@@ -236,10 +250,10 @@ export default {
             || html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
           if (img) imageUrl = img[1].replace(/&amp;/g, "&");
           const capDiv = html.match(/<div[^>]+class=["'][^"']*Caption[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-          if (capDiv) caption = capDiv[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          if (capDiv) caption = decodeEntities(capDiv[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
           if (!caption) {
             const desc = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i);
-            if (desc) caption = desc[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+            if (desc) caption = decodeEntities(desc[1]);
           }
         }
 
@@ -280,7 +294,7 @@ export default {
             const desc = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i);
             if (img) imageUrl = img[1].replace(/&amp;/g, "&");
             if (desc && !caption) {
-              caption = desc[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+              caption = decodeEntities(desc[1]);
               const m1 = caption.match(/^"(.+)"\s*-\s*@/s);
               if (m1) caption = m1[1];
             }
@@ -310,33 +324,40 @@ export default {
       const username = url.searchParams.get("username");
       const count = Math.min(parseInt(url.searchParams.get("count") || "50", 10), 100);
       const maxId = url.searchParams.get("max_id") || "";
-      if (!username) return json({ error: "username required" }, 400);
+      const directUserId = url.searchParams.get("user_id") || "";
+      if (!username && !directUserId) return json({ error: "username or user_id required" }, 400);
 
       const headers = {
         "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 14_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1",
         "X-IG-App-ID": "936619743392459",
         "Accept": "*/*",
         "Accept-Language": "en-US,en;q=0.9",
-        "Referer": `https://www.instagram.com/${username}/`,
+        "Referer": `https://www.instagram.com/${username || ""}/`,
       };
 
       try {
-        // 1. Resolve user ID via the public web profile info endpoint
-        const pRes = await fetch(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`, { headers });
-        if (!pRes.ok) return json({ error: `profile lookup ${pRes.status}` }, 502);
-        const pData = await pRes.json();
-        const user = pData?.data?.user;
-        if (!user?.id) return json({ error: "user id not found" }, 404);
-
-        const userId = user.id;
-        const profile = {
-          id: userId,
-          username: user.username,
-          fullName: user.full_name,
-          biography: user.biography,
-          profilePicUrl: user.profile_pic_url_hd || user.profile_pic_url,
-          followers: user.edge_followed_by?.count,
-        };
+        // 1. Resolve user ID. Skip the profile call if the caller passed user_id
+        //    explicitly — saves one rate-limited request per paginated call.
+        let userId, user = null, profile = null;
+        if (directUserId) {
+          userId = directUserId;
+          profile = { id: userId, username: username || null };
+        } else {
+          const pRes = await fetch(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`, { headers });
+          if (!pRes.ok) return json({ error: `profile lookup ${pRes.status}` }, 502);
+          const pData = await pRes.json();
+          user = pData?.data?.user;
+          if (!user?.id) return json({ error: "user id not found" }, 404);
+          userId = user.id;
+          profile = {
+            id: userId,
+            username: user.username,
+            fullName: user.full_name,
+            biography: user.biography,
+            profilePicUrl: user.profile_pic_url_hd || user.profile_pic_url,
+            followers: user.edge_followed_by?.count,
+          };
+        }
 
         // 2. Pull the recent feed. Three strategies, falling back in order:
         //    a) web_profile_info already embeds `edge_owner_to_timeline_media`
@@ -351,8 +372,9 @@ export default {
         let moreAvailable = false;
         let nextMaxId = null;
 
-        // (a) Embedded timeline from the profile we already have.
-        const embedded = user.edge_owner_to_timeline_media;
+        // (a) Embedded timeline from the profile we already have (skipped if
+        //     caller passed user_id directly so we never fetched the profile).
+        const embedded = user?.edge_owner_to_timeline_media;
         if (!maxId && embedded?.edges?.length) {
           items = embedded.edges.map(({ node }) => extractFromTimelineNode(node)).filter(it => it.imageUrl);
           moreAvailable = !!embedded.page_info?.has_next_page;
@@ -360,7 +382,7 @@ export default {
         }
 
         // (b) GraphQL query for additional pages (uses end_cursor when provided).
-        if (items.length < count && (maxId || moreAvailable)) {
+        if (items.length < count && (maxId || moreAvailable || directUserId)) {
           const cursor = maxId || nextMaxId;
           const variables = encodeURIComponent(JSON.stringify({ id: userId, first: count, after: cursor || null }));
           const gqlRes = await fetch(`https://www.instagram.com/graphql/query/?query_hash=003056d32c2554def87228bc3fd9668a&variables=${variables}`, { headers });
