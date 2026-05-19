@@ -193,6 +193,49 @@ function looksLikeProduct(caption) {
   return false;
 }
 
+// LLM-based classifier — second opinion on top of the heuristic.
+// Returns { is_shoe: bool, name: string|null, category: string|null, reason: string }.
+// Falls through gracefully if AI is unavailable or rate-limited.
+async function classifyPostWithAi(env, caption) {
+  if (!env.AI || !caption) return null;
+  const trimmed = caption.replace(/\s+/g, " ").slice(0, 400);
+  const prompt = `You sort Instagram posts from a thrift shoe shop (Silvarkicks Store). Each post is either ONE specific pair of shoes listed for sale, OR a non-product post. Reply with strict minified JSON only, no prose, no code fences.
+
+Schema:
+{"is_shoe": true|false, "name": "<short brand + model OR generic descriptor>", "category": "<one of: Sneakers, Sports/Athletic, Boots, Loafers, Formal, Heels, Sandals, Slides, Other>", "reason": "<3-6 words>"}
+
+Rules (read carefully):
+- The shop posts a SINGLE pair per listing. Captions are short, often only a brand/model + size + a WhatsApp number. Examples that are ALL shoes (is_shoe=true): "Air force..10uk 45euro", "Nike cortez.. size 42", "Tn..9uk 44euro", "Hh..11uk 46euro", "Js13..6uk 40euro", "Size..11#45", "Size..8#42", "Puma..6.5uk 40euro", "Aldo..size 42 to 47".
+- is_shoe = true whenever there is a size signal (UK/EU/euro/# followed by a number, or the word "size" + a number). Even if no brand is named, the post is a shoe. Use "Pre-loved Pair" as the name in that case.
+- is_shoe = false ONLY for: shop intros, owner photos, marketing slides, restock-coming-soon announcements, greetings, holiday posts, anything without any size or shoe brand. Example (is_shoe=false): "Silvarkicks_store.. Whastup 0746262400" (shop intro, no shoe).
+- Decode shorthand: "Tn" = Nike TN; "Hh" = Helly Hansen; "Js13" = Jordan 13; "Js1" = Jordan 1; "Drose" = Adidas D Rose; "Nb" / "Nb." = New Balance; "Under urmer"/"Under armer" = Under Armour; "Cat" (standalone) = CAT boots; "Air force" = Nike Air Force; "Air max" = Nike Air Max; "Cortez" = Nike Cortez; "Gazelle" = Adidas Gazelle; "Samba"/"Samoa" = Adidas; "Stan smith" = Adidas Stan Smith.
+- name MUST be brand+model when known, never "Size" or "Tn" or "Hh" verbatim. Strip sizes/phone numbers. If truly unknown brand but a size exists, name = "Pre-loved Pair".
+- category: match the model to one of the listed options. Defaults: Air Force/Cortez/Gazelle/Samba/Samoa/Stan Smith/Vans/Converse/Zara/Levi's/Polo = Sneakers; Air Max/React/Flight/Zoom/Hyperdunk/Vapormax/Pegasus/Huarache/Kyrie/D Rose/Jordan/Puma/Asics/Reebok/New Balance/Under Armour = Sports/Athletic; Timberland/Dr Martens/UGG/Lugz/CAT = Boots; Clarks/Aldo = Loafers.
+
+Caption: """${trimmed}"""`;
+  try {
+    const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      max_tokens: 120,
+    });
+    const text = (result?.response || "").trim();
+    // Strip code fences if the model wraps the JSON
+    const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    const m = cleaned.match(/\{[\s\S]*\}/);
+    if (!m) return null;
+    const parsed = JSON.parse(m[0]);
+    return {
+      is_shoe: !!parsed.is_shoe,
+      name: parsed.name || null,
+      category: parsed.category || null,
+      reason: parsed.reason || "",
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 // Feed-fetch helper — module-level so /api/ig-feed AND /api/ig-discover share
 // the same logic. Workers can't fetch() their own URL (error 1042), so the
 // only way to share is via a plain function.
@@ -659,17 +702,43 @@ export default {
         const feedData = await fetchIgFeed({ username, userId: directUserId, count: 50 });
         if (!feedData.items) return json({ error: feedData.error || "feed empty" }, 502);
 
-        const candidates = [];
-        for (const it of feedData.items) {
-          if (candidates.length >= limit) break;
-          const id = `ig_${it.shortcode}`;
-          if (existingIds.has(id)) continue;
-          if (!looksLikeProduct(it.caption)) continue;
-          const suggested = parseCaptionForBag(it.caption);
-          candidates.push({ ...it, suggested });
-        }
+        // Take new-only candidates first (cheap), then classify with LLM in parallel.
+        // Decision matrix:
+        //   heuristic YES + AI ANY     → shoe (heuristic is liberal but reliable on this shop's caption shape)
+        //   heuristic NO  + AI YES     → shoe (AI catches subtle/short captions the heuristic missed)
+        //   heuristic NO  + AI NO/null → not a shoe (skip)
+        // LLM is mainly used to clean up the suggested NAME, not to veto inclusion.
+        const fresh = feedData.items.filter(it => !existingIds.has(`ig_${it.shortcode}`)).slice(0, limit * 2);
+        const classified = await Promise.all(fresh.map(async (it) => {
+          const heuristic = looksLikeProduct(it.caption);
+          const ai = await classifyPostWithAi(env, it.caption);
+          const isShoe = heuristic || (ai && ai.is_shoe);
+          if (!isShoe) return null;
+          const heuristicSuggestion = parseCaptionForBag(it.caption);
+          // Prefer AI's name/category when it identified the post as a shoe and gave a brand;
+          // otherwise fall back to heuristic. Never let AI return "Size"/"Tn"/etc literal.
+          let name = heuristicSuggestion.name;
+          let category = heuristicSuggestion.category;
+          if (ai?.is_shoe && ai.name && !/^(size|tn|hh|js\d+)$/i.test(ai.name.trim())) {
+            name = ai.name.trim();
+            if (ai.category) category = ai.category;
+          }
+          return {
+            ...it,
+            suggested: { name, category, stock: heuristicSuggestion.stock, description: heuristicSuggestion.description },
+            ai_reason: ai?.reason || (heuristic ? "matched product heuristic" : ""),
+            classifier: ai ? "llm+heuristic" : "heuristic",
+          };
+        }));
+        const candidates = classified.filter(Boolean).slice(0, limit);
 
-        return json({ count: candidates.length, items: candidates, profile: feedData.profile });
+        return json({
+          count: candidates.length,
+          scanned: fresh.length,
+          items: candidates,
+          profile: feedData.profile,
+          ai_enabled: !!env.AI,
+        });
       } catch (err) {
         return json({ error: err.message }, 502);
       }
