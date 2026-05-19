@@ -894,6 +894,61 @@ html { scroll-behavior: smooth; }
 .bulk-bar strong { font-size: 18px; font-family: var(--serif); color: var(--gold); margin-right: 4px; }
 .bulk-bar .btn-admin { padding: 6px 12px; font-size: 12.5px; }
 
+/* IG sync list */
+.ig-sync-list { display: flex; flex-direction: column; gap: 10px; max-height: 640px; overflow-y: auto; padding: 4px; }
+.ig-sync-list:empty { display: none; }
+.ig-sync-row {
+  display: grid;
+  grid-template-columns: 30px 92px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+.ig-sync-check { display: flex; align-items: center; justify-content: center; }
+.ig-sync-check input[type="checkbox"] {
+  width: 20px; height: 20px;
+  accent-color: var(--gold-deep);
+  cursor: pointer;
+}
+.ig-sync-row img {
+  width: 92px; height: 92px; object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.ig-sync-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ig-sync-row-1 { display: flex; gap: 8px; flex-wrap: wrap; }
+.ig-sync-name {
+  flex: 1 1 180px; min-width: 0;
+  padding: 8px 10px; font-size: 14px; font-weight: 600;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff;
+  font-family: inherit;
+}
+.ig-sync-name:focus { outline: none; border-color: var(--gold-deep); box-shadow: 0 0 0 3px rgba(110,244,7,0.15); }
+.ig-sync-cat {
+  padding: 8px 10px; font-size: 13px;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff;
+  font-family: inherit;
+}
+.ig-sync-row-2 { display: flex; gap: 12px; align-items: center; font-size: 12.5px; }
+.ig-sync-size { color: var(--ink-soft); font-weight: 600; background: rgba(110,244,7,0.08); padding: 2px 8px; border-radius: 99px; }
+.ig-sync-postlink { color: var(--ink-faint); font-size: 11.5px; }
+.ig-sync-postlink:hover { color: var(--gold-deep); }
+.ig-sync-caption {
+  font-size: 12px; color: var(--ink-faint); font-style: italic;
+  line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+@media (max-width: 640px) {
+  .ig-sync-row { grid-template-columns: 24px 72px 1fr; padding: 8px; gap: 8px; }
+  .ig-sync-row img { width: 72px; height: 72px; }
+  .ig-sync-name { font-size: 13px; padding: 6px 8px; }
+}
+
 /* Admin search */
 .admin-search-wrap {
   display: flex;

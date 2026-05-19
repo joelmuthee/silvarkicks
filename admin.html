@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0a0a0a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=23">
+<link rel="stylesheet" href="styles.css?v=24">
 <script src="https://www.google.com/recaptcha/enterprise.js?render=6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX" async defer></script>
 </head>
 <body style="background:#f5f5f7;">
@@ -42,11 +42,26 @@
 
   <nav class="admin-nav" id="adminNav">
     <a href="#addForm" class="admin-nav-cta">+ Add new item</a>
+    <a href="#igSyncDash">Sync IG</a>
     <a href="#salesDash">Sales</a>
     <a href="#invDash">Inventory</a>
     <a href="#broadcastDash">WhatsApp Marketing</a>
     <a href="#allItems">All items <span class="admin-nav-count" id="navItemCount"></span></a>
   </nav>
+
+  <section class="dash" id="igSyncDash">
+    <h2 class="dash-title">Sync from Instagram</h2>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin:-8px 0 16px;">Pulls the latest posts from <strong>@silvarkicks_store1</strong> that aren't already on the site. Review the suggested name and size for each, untick anything you don't want, then add the rest in one click.</p>
+    <div class="admin-actions" style="margin-bottom:16px;">
+      <button class="btn-admin gold" id="igSyncCheckBtn" type="button">Check for new posts</button>
+      <span id="igSyncStatus" style="font-size:13px;color:var(--ink-soft);align-self:center;"></span>
+    </div>
+    <div id="igSyncList" class="ig-sync-list"></div>
+    <div class="admin-actions" id="igSyncCommitRow" style="display:none;margin-top:16px;">
+      <button class="btn-admin primary" id="igSyncCommitBtn" type="button">Add selected pairs</button>
+      <button class="btn-admin" id="igSyncCancelBtn" type="button">Cancel</button>
+    </div>
+  </section>
 
   <section class="dash" id="salesDash">
     <h2 class="dash-title">Sales Overview</h2>
@@ -288,6 +303,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=20"></script>
+<script src="admin.js?v=21"></script>
 </body>
 </html>
