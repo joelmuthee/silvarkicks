@@ -193,7 +193,90 @@ function looksLikeProduct(caption) {
   return false;
 }
 
-// LLM-based classifier — second opinion on top of the heuristic.
+// Vision-model classifier — looks at the actual shoe photo + caption.
+// Llama 3.2 Vision (Workers AI free tier) sees the image, so it can tell
+// sneakers from slides from boots even when the caption is just "Size..11#45".
+// Returns { is_shoe, name, category, reason } or null on failure.
+async function classifyPostWithVision(env, caption, imageUrl) {
+  if (!env.AI || !imageUrl) return null;
+  try {
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) return { _debug: `img fetch ${imgRes.status}` };
+    const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
+    const trimmed = (caption || "").replace(/\s+/g, " ").slice(0, 400);
+    const prompt = `You sort Instagram posts from a thrift shoe shop. You're given ONE photo + ONE caption. Decide:
+1. Is this a single pair of shoes for sale? (is_shoe true|false)
+2. What brand/model is it? (name — short, e.g. "Nike Air Force", or "Pre-loved Pair" if unknown)
+3. What category? Pick exactly one: Sneakers, Sports/Athletic, Boots, Loafers, Formal, Heels, Sandals, Slides, Other.
+
+Category guide:
+- Sneakers: casual lifestyle shoes — Air Force, Cortez, Stan Smith, Gazelle, Vans, Converse, Samba.
+- Sports/Athletic: running/training/basketball — Air Max, React, Pegasus, Hyperdunk, Jordan, Puma running, New Balance, Under Armour, Kyrie, D Rose.
+- Boots: ankle-high or taller — Timberland, Dr Martens, UGG, Lugz, CAT, work boots.
+- Loafers: slip-on dress shoes, penny loafers, mocassins — Clarks, Aldo loafers.
+- Formal: oxford, derby, brogue, dress shoes.
+- Heels: women's heeled shoes.
+- Sandals: open-toe strapped footwear.
+- Slides: open-toe slip-ons without straps, pool slides, rubber sliders.
+
+is_shoe=false ONLY for: shop intros, marketing slides, owner photos, announcements. Posts with a size signal (#45, 9uk, EU 42, size N) are ALWAYS shoes even if the brand isn't clear.
+
+Decode shorthand: Tn=Nike TN, Hh=Helly Hansen, Js13=Jordan 13, Js1=Jordan 1, Drose=Adidas D Rose, Nb=New Balance, "Under urmer"=Under Armour, Cat=CAT boots.
+
+Caption: """${trimmed}"""
+
+Reply with strict minified JSON, no prose, no code fences:
+{"is_shoe":true|false,"name":"<brand+model or Pre-loved Pair>","category":"<one from the list>","reason":"<3-6 words>"}`;
+    // Workers AI llama-3.2-vision wants the image as a byte array on `image`
+    // and the textual prompt on `prompt`. Not OpenAI-style messages.
+    const result = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
+      prompt,
+      image: Array.from(imgBytes),
+      max_tokens: 200,
+      temperature: 0.1,
+    });
+    // Vision response shape varies by Workers AI build. Sometimes it's already
+    // a parsed object (response = {is_shoe, name, ...}), sometimes a JSON string.
+    let parsed = null;
+    if (result?.response && typeof result.response === "object") {
+      parsed = result.response;
+    } else {
+      let text = "";
+      if (typeof result?.response === "string") text = result.response;
+      else if (typeof result?.description === "string") text = result.description;
+      else if (typeof result === "string") text = result;
+      text = text.trim();
+      if (text) {
+        const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+        const m = cleaned.match(/\{[\s\S]*\}/);
+        if (m) {
+          try { parsed = JSON.parse(m[0]); } catch (_) {}
+        }
+      }
+    }
+    if (!parsed) return { _debug: "could not parse vision output", raw: JSON.stringify(result).slice(0, 400) };
+    return {
+      is_shoe: !!parsed.is_shoe,
+      name: parsed.name || null,
+      category: parsed.category || null,
+      reason: parsed.reason || "",
+      via: "vision",
+    };
+  } catch (err) {
+    return { _debug: `vision throw: ${err.message}` };
+  }
+}
+
+function arrayToB64(buf) {
+  let s = "";
+  const CHUNK = 8192;
+  for (let i = 0; i < buf.length; i += CHUNK) {
+    s += String.fromCharCode(...buf.subarray(i, i + CHUNK));
+  }
+  return btoa(s);
+}
+
+// Text-only LLM classifier — fallback when the vision call fails.
 // Returns { is_shoe: bool, name: string|null, category: string|null, reason: string }.
 // Falls through gracefully if AI is unavailable or rate-limited.
 async function classifyPostWithAi(env, caption) {
@@ -681,6 +764,40 @@ export default {
       }
     }
 
+    // One-time Llama vision license acceptance. CF Workers AI requires
+    // calling the model with prompt='agree' once to accept the EULA before
+    // any further inference works.
+    if (request.method === "GET" && path === "/api/ig-accept-license") {
+      if (!isAuthed(request, env)) return json({ error: "unauthorized" }, 401);
+      try {
+        const r = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", { prompt: "agree", max_tokens: 8 });
+        return json({ ok: true, response: r });
+      } catch (err) {
+        return json({ error: err.message }, 502);
+      }
+    }
+
+    // Debug: classify a single IG shortcode through both vision + text models.
+    // GET /api/ig-classify?shortcode=...&caption=... (caption optional, admin auth)
+    if (request.method === "GET" && path === "/api/ig-classify") {
+      if (!isAuthed(request, env)) return json({ error: "unauthorized" }, 401);
+      const sc = url.searchParams.get("shortcode");
+      const capOverride = url.searchParams.get("caption");
+      if (!sc) return json({ error: "shortcode required" }, 400);
+      try {
+        // Always use the IG CDN URL (workers can't recursively fetch their own URLs).
+        const feed = await fetchIgFeed({ userId: "21684819437", count: 50 });
+        const found = (feed.items || []).find(i => i.shortcode === sc);
+        const imageUrl = found?.imageUrl || null;
+        const caption = capOverride || found?.caption || "";
+        const vision = await classifyPostWithVision(env, caption, imageUrl);
+        const text = await classifyPostWithAi(env, caption);
+        return json({ shortcode: sc, caption, imageUrl, vision, text_only: text });
+      } catch (err) {
+        return json({ error: err.message }, 502);
+      }
+    }
+
     // ---- IG sync: discover new posts (admin-only preview) ----
     // GET /api/ig-discover?username=...&user_id=...&limit=20
     // Returns up to `limit` posts in the feed whose ig_<shortcode> isn't
@@ -702,32 +819,58 @@ export default {
         const feedData = await fetchIgFeed({ username, userId: directUserId, count: 50 });
         if (!feedData.items) return json({ error: feedData.error || "feed empty" }, 502);
 
-        // Take new-only candidates first (cheap), then classify with LLM in parallel.
-        // Decision matrix:
-        //   heuristic YES + AI ANY     → shoe (heuristic is liberal but reliable on this shop's caption shape)
-        //   heuristic NO  + AI YES     → shoe (AI catches subtle/short captions the heuristic missed)
-        //   heuristic NO  + AI NO/null → not a shoe (skip)
-        // LLM is mainly used to clean up the suggested NAME, not to veto inclusion.
+        // Classification pipeline (per candidate, in parallel):
+        //   1. Heuristic (regex/brand keywords). Liberal, fast, free.
+        //   2. Vision model (Llama 3.2 Vision) — actually sees the photo so it
+        //      can tell sneakers vs slides vs boots even when caption is sparse.
+        //   3. Text-only LLM fallback if vision call fails.
+        //   4. Final is_shoe = heuristic OR ai.is_shoe (heuristic acts as safety net).
+        //   5. Name + category prefer the AI answer when it's specific; never
+        //      accept literal "Size"/"Tn"/"Hh" — those are caption fragments.
+        // Hybrid classification: vision model sees the photo (best for category),
+        // text LLM reads the caption (best for decoding shorthand like
+        // Tn→Nike TN, Hh→Helly Hansen, Js13→Jordan 13). Heuristic is the
+        // safety net so we never drop a clear-product caption.
         const fresh = feedData.items.filter(it => !existingIds.has(`ig_${it.shortcode}`)).slice(0, limit * 2);
         const classified = await Promise.all(fresh.map(async (it) => {
           const heuristic = looksLikeProduct(it.caption);
-          const ai = await classifyPostWithAi(env, it.caption);
-          const isShoe = heuristic || (ai && ai.is_shoe);
+          const [vision, text] = await Promise.all([
+            classifyPostWithVision(env, it.caption, it.imageUrl),
+            classifyPostWithAi(env, it.caption),
+          ]);
+          const visionOk = vision && !vision._debug;
+          const isShoe = heuristic || (visionOk && vision.is_shoe) || (text && text.is_shoe);
           if (!isShoe) return null;
           const heuristicSuggestion = parseCaptionForBag(it.caption);
-          // Prefer AI's name/category when it identified the post as a shoe and gave a brand;
-          // otherwise fall back to heuristic. Never let AI return "Size"/"Tn"/etc literal.
+          // Name: text LLM is best at brand shorthand; only fall back to vision
+          // or heuristic if text didn't get a brand. Strip any literal "Size"/"Tn"/"Hh".
+          const looksLikeFragment = (n) => !n || /^(size|tn|hh|js\d+|nb)$/i.test(n.trim());
           let name = heuristicSuggestion.name;
-          let category = heuristicSuggestion.category;
-          if (ai?.is_shoe && ai.name && !/^(size|tn|hh|js\d+)$/i.test(ai.name.trim())) {
-            name = ai.name.trim();
-            if (ai.category) category = ai.category;
+          if (text?.is_shoe && !looksLikeFragment(text.name) && text.name !== "Pre-loved Pair") {
+            name = text.name.trim();
+          } else if (visionOk && vision.is_shoe && !looksLikeFragment(vision.name) && vision.name !== "Pre-loved Pair") {
+            name = vision.name.trim();
+          } else if (visionOk && vision.is_shoe && vision.name === "Pre-loved Pair") {
+            name = "Pre-loved Pair";
           }
+          // Category: vision wins — it actually looked at the photo. Text LLM is
+          // second best (caption gives a model hint). Heuristic last.
+          let category = heuristicSuggestion.category;
+          if (visionOk && vision.is_shoe && vision.category) {
+            category = vision.category;
+          } else if (text?.is_shoe && text.category && text.category !== "Other") {
+            category = text.category;
+          }
+          const reason = visionOk ? vision.reason : (text?.reason || (heuristic ? "matched product heuristic" : ""));
+          let classifier = "heuristic";
+          if (visionOk && text) classifier = "vision+text";
+          else if (visionOk) classifier = "vision";
+          else if (text) classifier = "text";
           return {
             ...it,
             suggested: { name, category, stock: heuristicSuggestion.stock, description: heuristicSuggestion.description },
-            ai_reason: ai?.reason || (heuristic ? "matched product heuristic" : ""),
-            classifier: ai ? "llm+heuristic" : "heuristic",
+            ai_reason: reason,
+            classifier,
           };
         }));
         const candidates = classified.filter(Boolean).slice(0, limit);
