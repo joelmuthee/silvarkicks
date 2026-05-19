@@ -309,8 +309,7 @@ function generateDescription(name, cat) {
 
   const catMap = {
     Sneakers: 'sneakers', 'Sports/Athletic': 'athletic kicks', Boots: 'boots',
-    Loafers: 'loafers', Formal: 'formal shoes', Heels: 'heels',
-    Sandals: 'sandals', Slides: 'slides',
+    Loafers: 'loafers', Formal: 'formal shoes', Slides: 'slides',
   };
   const type = catMap[cat] || 'pair';
 
@@ -860,7 +859,7 @@ async function bulkDelete() {
 }
 
 async function bulkSetCategory() {
-  const cat = prompt('Set category for selected items to:\n(use exact name e.g. Sneakers, Boots, Loafers, Sandals)');
+  const cat = prompt('Set category for selected items to:\n(use exact name e.g. Sneakers, Boots, Loafers, Slides)');
   if (!cat) return;
   bags.forEach(b => { if (bulkSelected.has(b.id)) b.category = cat; });
   try {
@@ -1070,7 +1069,7 @@ const igSyncStatus = document.getElementById('igSyncStatus');
 const igSyncListEl = document.getElementById('igSyncList');
 const igSyncCommitRow = document.getElementById('igSyncCommitRow');
 
-const SHOE_CATEGORIES = ['Sneakers', 'Sports/Athletic', 'Boots', 'Loafers', 'Formal', 'Heels', 'Sandals', 'Slides', 'Other'];
+const SHOE_CATEGORIES = ['Sneakers', 'Sports/Athletic', 'Boots', 'Loafers', 'Formal', 'Slides', 'Other'];
 
 igSyncCheckBtn?.addEventListener('click', checkForNewIgPosts);
 igSyncCancelBtn?.addEventListener('click', resetIgSync);

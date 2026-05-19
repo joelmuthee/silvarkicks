@@ -136,8 +136,6 @@ const SHOE_BRANDS = [
   ["nike",             "Nike",              "Sneakers"],
   ["loafer",           null,                "Loafers"],
   ["boot",             null,                "Boots"],
-  ["heel",             null,                "Heels"],
-  ["sandal",           null,                "Sandals"],
   ["slide",            null,                "Slides"],
 ];
 
@@ -207,17 +205,16 @@ async function classifyPostWithVision(env, caption, imageUrl) {
     const prompt = `You sort Instagram posts from a thrift shoe shop. You're given ONE photo + ONE caption. Decide:
 1. Is this a single pair of shoes for sale? (is_shoe true|false)
 2. What brand/model is it? (name — short, e.g. "Nike Air Force", or "Pre-loved Pair" if unknown)
-3. What category? Pick exactly one: Sneakers, Sports/Athletic, Boots, Loafers, Formal, Heels, Sandals, Slides, Other.
+3. What category? Pick exactly one: Sneakers, Sports/Athletic, Boots, Loafers, Formal, Slides, Other. NEVER use Heels or Sandals — Silvarkicks doesn't stock those.
 
 Category guide:
 - Sneakers: casual lifestyle shoes — Air Force, Cortez, Stan Smith, Gazelle, Vans, Converse, Samba.
 - Sports/Athletic: running/training/basketball — Air Max, React, Pegasus, Hyperdunk, Jordan, Puma running, New Balance, Under Armour, Kyrie, D Rose.
-- Boots: ankle-high or taller — Timberland, Dr Martens, UGG, Lugz, CAT, work boots.
+- Boots: ankle-high or taller — Timberland, Dr Martens, UGG, Lugz, CAT, work boots, hiking boots, chukka.
 - Loafers: slip-on dress shoes, penny loafers, mocassins — Clarks, Aldo loafers.
 - Formal: oxford, derby, brogue, dress shoes.
-- Heels: women's heeled shoes.
-- Sandals: open-toe strapped footwear.
-- Slides: open-toe slip-ons without straps, pool slides, rubber sliders.
+- Slides: open-toe slip-ons, pool slides, rubber sliders, flip-flops.
+- Other: anything genuinely unclassifiable (rare). Use this rather than Heels/Sandals.
 
 is_shoe=false ONLY for: shop intros, marketing slides, owner photos, announcements. Posts with a size signal (#45, 9uk, EU 42, size N) are ALWAYS shoes even if the brand isn't clear.
 
@@ -285,7 +282,9 @@ async function classifyPostWithAi(env, caption) {
   const prompt = `You sort Instagram posts from a thrift shoe shop (Silvarkicks Store). Each post is either ONE specific pair of shoes listed for sale, OR a non-product post. Reply with strict minified JSON only, no prose, no code fences.
 
 Schema:
-{"is_shoe": true|false, "name": "<short brand + model OR generic descriptor>", "category": "<one of: Sneakers, Sports/Athletic, Boots, Loafers, Formal, Heels, Sandals, Slides, Other>", "reason": "<3-6 words>"}
+{"is_shoe": true|false, "name": "<short brand + model OR generic descriptor>", "category": "<one of: Sneakers, Sports/Athletic, Boots, Loafers, Formal, Slides, Other>", "reason": "<3-6 words>"}
+
+NEVER output "Heels" or "Sandals" — Silvarkicks does not stock those categories.
 
 Rules (read carefully):
 - The shop posts a SINGLE pair per listing. Captions are short, often only a brand/model + size + a WhatsApp number. Examples that are ALL shoes (is_shoe=true): "Air force..10uk 45euro", "Nike cortez.. size 42", "Tn..9uk 44euro", "Hh..11uk 46euro", "Js13..6uk 40euro", "Size..11#45", "Size..8#42", "Puma..6.5uk 40euro", "Aldo..size 42 to 47".
@@ -855,11 +854,19 @@ export default {
           }
           // Category: vision wins — it actually looked at the photo. Text LLM is
           // second best (caption gives a model hint). Heuristic last.
+          // Silvarkicks doesn't stock Heels/Sandals — if the model suggests one
+          // of those, coerce to a safer adjacent category.
+          const coerce = (c) => {
+            if (!c) return c;
+            if (/^heels?$/i.test(c)) return "Formal";
+            if (/^sandals?$/i.test(c)) return "Slides";
+            return c;
+          };
           let category = heuristicSuggestion.category;
           if (visionOk && vision.is_shoe && vision.category) {
-            category = vision.category;
+            category = coerce(vision.category);
           } else if (text?.is_shoe && text.category && text.category !== "Other") {
-            category = text.category;
+            category = coerce(text.category);
           }
           const reason = visionOk ? vision.reason : (text?.reason || (heuristic ? "matched product heuristic" : ""));
           let classifier = "heuristic";
