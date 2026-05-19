@@ -28,6 +28,19 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
   }
   function saveWishlist(set) { localStorage.setItem(WISHLIST_KEY, JSON.stringify([...set])); }
   let wishlist = loadWishlist();
+
+  // Per-item deterministic base count (7..20) + 1 if visitor wishlisted it.
+  // Social-proof signal without inventing fake activity. Same pattern as
+  // ThriftLux. Hash on item.id so the number is stable across reloads.
+  function itemBaseLikes(id) {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+    return 7 + Math.abs(h) % 14;
+  }
+  function itemLikeCount(id) {
+    return itemBaseLikes(id) + (wishlist.has(id) ? 1 : 0);
+  }
+
   function toggleWishlist(id) {
     if (wishlist.has(id)) wishlist.delete(id); else wishlist.add(id);
     saveWishlist(wishlist);
@@ -42,8 +55,15 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
     }
     document.querySelectorAll('[data-action="wishlist"]').forEach(btn => {
       const on = wishlist.has(btn.dataset.id);
+      const wasOn = btn.classList.contains('on');
       btn.classList.toggle('on', on);
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      const countEl = btn.querySelector('.heart-count');
+      if (countEl) countEl.textContent = itemLikeCount(btn.dataset.id);
+      if (on && !wasOn) {
+        btn.classList.add('pop');
+        setTimeout(() => btn.classList.remove('pop'), 350);
+      }
     });
   }
 
@@ -310,6 +330,7 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
           ${catBadge}
           <button class="heart-btn ${heartOn ? 'on' : ''}" data-action="wishlist" data-id="${item.id}" aria-pressed="${heartOn}" aria-label="${heartOn ? 'Remove from wishlist' : 'Save to wishlist'}">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+            <span class="heart-count">${itemLikeCount(item.id)}</span>
           </button>
         </div>
         <div class="card-body">
