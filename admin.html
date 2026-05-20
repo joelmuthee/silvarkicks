@@ -67,8 +67,8 @@
   </section>
 
   <nav class="admin-nav" id="adminNav">
-    <a href="#addForm" class="admin-nav-cta">+ Add new item</a>
-    <a href="#igSyncDash">Sync IG</a>
+    <a href="#igSyncDash" class="admin-nav-cta">⚡ Sync from Instagram</a>
+    <a href="#addForm">+ Add manually</a>
     <a href="#salesDash">Sales</a>
     <a href="#invDash">Inventory</a>
     <a href="#broadcastDash">WhatsApp Marketing</a>
@@ -93,26 +93,7 @@
   <section class="dash" id="invDash">
     <h2 class="dash-title">Inventory Overview</h2>
     <div class="inv-kpi-grid" id="invKpiGrid"></div>
-    <div class="section-divider">Stock levels <span id="invSortLabel">sorted low to high</span></div>
-    <div class="inv-filter-bar filter-pills" id="invFilterBar"></div>
-    <div class="inv-table-wrap">
-      <table class="inv-table" id="invTable">
-        <thead>
-          <tr>
-            <th style="width:50px"></th>
-            <th>Item</th>
-            <th>Category</th>
-            <th>Price</th>
-            <th>Stock by size</th>
-            <th>Total</th>
-            <th>Status</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="invTableBody"></tbody>
-      </table>
-    </div>
-    <button class="btn-admin" id="invShowMore" style="display:none;width:100%;margin-top:14px;"></button>
+    <p style="font-size:12.5px;color:var(--ink-faint);margin-top:10px;">Per-item stock and status live in <a href="#allItems" style="color:var(--gold-deep);font-weight:600;">All items</a> below.</p>
   </section>
 
   <section class="dash" id="broadcastDash">
@@ -313,6 +294,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=22"></script>
+<script src="admin.js?v=23"></script>
 </body>
 </html>

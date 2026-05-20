@@ -731,7 +731,8 @@ function renderInventory() {
   const lbl = document.getElementById('invSortLabel');
   if (lbl) lbl.textContent = `showing ${sorted.length} of ${filtered.length}, sorted low to high`;
 
-  document.getElementById('invTableBody').innerHTML = sorted.map(bag => {
+  const invBody = document.getElementById('invTableBody');
+  if (invBody) invBody.innerHTML = sorted.map(bag => {
     const units = totalStock(bag);
     const soldUnits = totalUnitsSold(bag);
     const stockEntries = Object.entries(bag.stock || {});
