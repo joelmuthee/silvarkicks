@@ -74,6 +74,62 @@ async function loadData() {
 const toast = document.getElementById('toast');
 function showToast(msg) { toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2800); }
 
+function confirmAction(message, okLabel = 'Confirm') {
+  return new Promise(resolve => {
+    const modal = document.getElementById('confirmModal');
+    const msgEl = document.getElementById('confirmModalMsg');
+    const okBtn = document.getElementById('confirmModalOk');
+    const cancelBtn = document.getElementById('confirmModalCancel');
+    msgEl.textContent = message;
+    okBtn.textContent = okLabel;
+    modal.style.display = 'flex';
+    const cleanup = result => {
+      modal.style.display = 'none';
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    };
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
+function chooseCategory() {
+  return new Promise(resolve => {
+    const modal = document.getElementById('categoryModal');
+    const sel = document.getElementById('categoryModalSelect');
+    const newWrap = document.getElementById('categoryModalNewWrap');
+    const newInput = document.getElementById('categoryModalNew');
+    const okBtn = document.getElementById('categoryModalOk');
+    const cancelBtn = document.getElementById('categoryModalCancel');
+    const cats = [...new Set(bags.map(b => b.category).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    sel.innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')
+      + '<option value="__new__">+ New category…</option>';
+    newWrap.style.display = 'none';
+    newInput.value = '';
+    modal.style.display = 'flex';
+    const onSelChange = () => {
+      const isNew = sel.value === '__new__';
+      newWrap.style.display = isNew ? '' : 'none';
+      if (isNew) newInput.focus();
+    };
+    const cleanup = result => {
+      modal.style.display = 'none';
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      sel.removeEventListener('change', onSelChange);
+      resolve(result);
+    };
+    const onOk = () => cleanup((sel.value === '__new__' ? newInput.value.trim() : sel.value) || null);
+    const onCancel = () => cleanup(null);
+    sel.addEventListener('change', onSelChange);
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
+
 function setSaving(on) {
   const btn = document.getElementById('saveBtn');
   btn.disabled = on;
@@ -458,7 +514,7 @@ function editItem(id) {
 }
 
 async function deleteItem(id) {
-  if (!confirm('Delete this item? This cannot be undone.')) return;
+  if (!await confirmAction('Delete this item? This cannot be undone.', 'Delete')) return;
   bags = bags.filter(b => b.id !== id);
   try {
     await apiPublish();
@@ -849,7 +905,7 @@ function bulkClear() { bulkSelected.clear(); renderList(); }
 function bulkSelectAll() { bags.forEach(b => bulkSelected.add(b.id)); renderList(); }
 
 async function bulkDelete() {
-  if (!confirm(`Delete ${bulkSelected.size} item(s)? This cannot be undone.`)) return;
+  if (!await confirmAction(`Delete ${bulkSelected.size} item(s)? This cannot be undone.`, 'Delete')) return;
   bags = bags.filter(b => !bulkSelected.has(b.id));
   bulkSelected.clear();
   try {
@@ -860,7 +916,7 @@ async function bulkDelete() {
 }
 
 async function bulkSetCategory() {
-  const cat = prompt('Set category for selected items to:\n(use exact name e.g. Sneakers, Boots, Loafers, Slides)');
+  const cat = await chooseCategory();
   if (!cat) return;
   bags.forEach(b => { if (bulkSelected.has(b.id)) b.category = cat; });
   try {
@@ -1040,10 +1096,10 @@ document.getElementById('broadcastCopyBtn')?.addEventListener('click', () => {
   showToast('Message copied. Paste it into WhatsApp broadcast.');
 });
 
-document.getElementById('broadcastStartBtn')?.addEventListener('click', () => {
+document.getElementById('broadcastStartBtn')?.addEventListener('click', async () => {
   const recipients = pastBuyers().filter(b => broadcastRecipientsState[b.phone]?.included);
   if (!recipients.length) { showToast('Pick at least one recipient.'); return; }
-  if (!confirm(`Open ${recipients.length} WhatsApp window${recipients.length === 1 ? '' : 's'}, one per buyer. Send each one manually. OK?`)) return;
+  if (!await confirmAction(`Open ${recipients.length} WhatsApp window${recipients.length === 1 ? '' : 's'}, one per buyer. Send each one manually. OK?`)) return;
   let i = 0;
   function next() {
     if (i >= recipients.length) {
