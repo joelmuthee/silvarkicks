@@ -13,6 +13,7 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
   const PAGE_SIZE = 15;
   let items = [];
   let settings = {};
+  let suspended = false;
   let currentAvail = 'all';
   let currentCat = 'all';
   let currentSize = 'all';
@@ -73,6 +74,7 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
       const json = await res.json();
       items = json.bags || [];
       settings = json.settings || {};
+      suspended = !!json.suspended;
     } catch(e) {
       try {
         const res = await fetch('data.json');
@@ -572,7 +574,20 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
 
   document.getElementById('year').textContent = new Date().getFullYear();
 
+  // Billing kill-switch: when suspended, replace the whole page with a neutral
+  // "offline" notice instead of the catalog. Buyers never see a payment reason.
+  function showSuspended() {
+    document.documentElement.style.overflow = 'hidden';
+    const o = document.createElement('div');
+    o.id = 'suspendedOverlay';
+    o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#16110c;color:#eee;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px;font-family:system-ui,-apple-system,sans-serif;';
+    o.innerHTML = '<h1 style="font-weight:600;font-size:clamp(26px,5vw,40px);margin:0 0 14px;">This store is temporarily offline</h1>'
+      + '<p style="font-size:16px;max-width:440px;line-height:1.6;opacity:0.8;margin:0;">We are not taking orders right now. Please check back soon.</p>';
+    document.body.appendChild(o);
+  }
+
   await loadData();
+  if (suspended) { showSuspended(); return; }
   render();
   observeFadeTargets();
   refreshWishlistUi();

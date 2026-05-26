@@ -4,6 +4,7 @@
 .claude/
 .wrangler/
 worker/.wrangler/
+worker/.master-token
 *.log
 .DS_Store
 Thumbs.db
