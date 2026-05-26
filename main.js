@@ -118,59 +118,24 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
     return (item.sales || []).length > 0;
   }
 
-  function enquireMessage(item, includeImageUrl) {
+  function enquireMessage(item) {
     const avail = availSizes(item);
     const sizePart = avail.length ? ` (size ${avail.join(', ')})` : '';
     const pricePart = (item.price > 0) ? ` (${fmtPrice(item.price)})` : '';
-    const tail = includeImageUrl ? `\n\n${item.image}` : '';
-    return `Hi Silvarkicks! I'd like to enquire about the *${item.name}*${sizePart}${pricePart} from your catalog.${tail}`;
+    return `Hi Silvarkicks! I'd like to enquire about the *${item.name}*${sizePart}${pricePart} from your catalog.`;
   }
 
   function whatsappLink(item) {
     const phone = (settings.whatsappNumber || '254746262400');
-    return `https://wa.me/${phone}?text=${encodeURIComponent(enquireMessage(item, true))}`;
+    const body = enquireMessage(item);
+    // Append the item's share page — WhatsApp previews it as a card with the
+    // product photo + name + price. Still opens straight to WhatsApp (no app picker).
+    // (Do NOT reintroduce navigator.share here — it forces the OS app-picker, which the owner rejected.)
+    const shareUrl = item.id ? `${API_BASE}/p/${encodeURIComponent(item.id)}` : '';
+    const msg = shareUrl ? `${body}\n\n${shareUrl}` : body;
+    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   }
 
-  async function tryShareWithImage(item) {
-    // Web Share API w/ files lets the user share the actual photo to WhatsApp.
-    // WA Android sometimes drops the text param though, so we ALSO pre-copy the
-    // caption to clipboard. Buyer can paste it if WA didn't carry it through.
-    if (!navigator.canShare || !navigator.share) return false;
-    try {
-      const res = await fetch(item.image, { mode: 'cors' });
-      if (!res.ok) return false;
-      const blob = await res.blob();
-      const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-      const file = new File([blob], `${item.name.replace(/[^a-z0-9]+/gi, '_')}.${ext}`, { type: blob.type });
-      if (!navigator.canShare({ files: [file] })) return false;
-      const message = enquireMessage(item, false);
-      try { await navigator.clipboard.writeText(message); } catch (_) { /* ignore */ }
-      await navigator.share({
-        files: [file],
-        text: message,
-        title: item.name,
-      });
-      showShareHint('Caption copied. Paste it into WhatsApp if it isn\'t already there.');
-      return true;
-    } catch (err) {
-      // User cancelled or share rejected — fall back to opening wa.me
-      return false;
-    }
-  }
-
-  function showShareHint(msg) {
-    let t = document.getElementById('shareHintToast');
-    if (!t) {
-      t = document.createElement('div');
-      t.id = 'shareHintToast';
-      t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0a0a0a;color:#6ef407;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 28px rgba(0,0,0,0.55);z-index:5000;max-width:92vw;text-align:center;line-height:1.4;opacity:0;transition:opacity 0.25s ease;border:1px solid rgba(110,244,7,0.4);';
-      document.body.appendChild(t);
-    }
-    t.textContent = msg;
-    requestAnimationFrame(() => { t.style.opacity = '1'; });
-    clearTimeout(window.__shareHintT);
-    window.__shareHintT = setTimeout(() => { t.style.opacity = '0'; }, 5000);
-  }
   function whatsappLinkAll(itemList) {
     const phone = (settings.whatsappNumber || '254746262400');
     if (!itemList.length) return `https://wa.me/${phone}`;
@@ -494,24 +459,12 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
     if (e.key === 'Escape' && drawer?.classList.contains('open')) closeDrawer();
   });
 
-  // Gallery delegated click for heart buttons + Enquire share-with-image
-  gallery.addEventListener('click', async e => {
+  // Gallery delegated click for heart buttons.
+  // Enquire just follows its wa.me href (target=_blank) — opens straight to
+  // WhatsApp with the /p/<id> share page previewing as a photo card. No app picker.
+  gallery.addEventListener('click', e => {
     const heart = e.target.closest('[data-action="wishlist"]');
     if (heart) { e.stopPropagation(); toggleWishlist(heart.dataset.id); return; }
-
-    const enquire = e.target.closest('.btn-card.primary');
-    if (enquire && !enquire.hasAttribute('aria-disabled')) {
-      const card = e.target.closest('.card');
-      const id = card?.querySelector('[data-id]')?.dataset.id;
-      const item = items.find(i => i.id === id);
-      // Skip Web Share API on desktop — pop the wa.me link in a new tab instead
-      const isMobile = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-      if (item && isMobile && navigator.canShare) {
-        e.preventDefault();
-        const shared = await tryShareWithImage(item);
-        if (!shared) window.open(enquire.href, '_blank', 'noopener');
-      }
-    }
   });
 
   // Fade-in-up on scroll (respects prefers-reduced-motion)
