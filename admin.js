@@ -54,6 +54,9 @@ async function apiUploadImage(base64, ext) {
   return `${API_BASE}${data.path}`;
 }
 
+// Low-level publish of the current in-memory `bags`. Do NOT call directly for
+// user-triggered writes — go through apiMutateAndPublish so a stale list can't
+// clobber the live catalogue.
 async function apiPublish() {
   const res = await fetch(`${API_BASE}/api/bulk`, {
     method: 'POST',
@@ -61,6 +64,22 @@ async function apiPublish() {
     body: JSON.stringify({ bags, settings }),
   });
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `Save failed: ${res.status}`); }
+}
+
+// Every admin write MUST go through this. It refetches live KV, applies the
+// caller's mutation against the FRESH list, then publishes — so a stale admin
+// tab (or a second device/webview) can't silently resurrect deleted items or
+// revert edits by republishing an old list. Mutators MUST look up bags by id
+// INSIDE the callback — anything captured before the refetch is stale. A
+// mutator may throw to abort the save.
+async function apiMutateAndPublish(mutate) {
+  const res = await fetch(`${API_BASE}/api/bags?_=${Date.now()}`);
+  if (!res.ok) throw new Error(`Failed to load fresh data: ${res.status}`);
+  const json = await res.json();
+  bags = Array.isArray(json.bags) ? json.bags : [];
+  settings = json.settings || {};
+  await mutate();
+  await apiPublish();
 }
 
 let accountSuspended = false;
@@ -148,24 +167,21 @@ async function restoreItem(id) {
   const trash = getTrash();
   const idx = trash.findIndex(t => t.item && t.item.id === id);
   if (idx === -1) return;
-  if (bags.some(b => b.id === id)) {
-    trash.splice(idx, 1); setTrash(trash); renderTrash();
-    showToast('Already in the catalog — cleared from Trash.');
-    return;
-  }
   const entry = trash[idx];
-  const at = Math.min(typeof entry.index === 'number' ? entry.index : bags.length, bags.length);
-  bags.splice(at, 0, entry.item);
+  let alreadyThere = false;
   try {
-    await apiPublish();
+    await apiMutateAndPublish(() => {
+      if (bags.some(b => b.id === id)) { alreadyThere = true; return; }
+      const at = Math.min(typeof entry.index === 'number' ? entry.index : bags.length, bags.length);
+      bags.splice(at, 0, entry.item);
+    });
     trash.splice(idx, 1); setTrash(trash);
     renderList();
     renderDashboard();
     renderInventory();
     renderTrash();
-    showToast('Item restored to the catalog.');
+    showToast(alreadyThere ? 'Already in the catalog — cleared from Trash.' : 'Item restored to the catalog.');
   } catch (err) {
-    bags = bags.filter(b => b.id !== id); // roll back local change
     showToast('Restore failed: ' + err.message);
   }
 }
@@ -535,18 +551,20 @@ async function saveItem() {
     }
 
     if (editingId) {
-      const bag = bags.find(b => b.id === editingId);
-      if (!bag) return;
-      bag.name = name;
-      bag.category = category;
-      bag.description = desc;
-      bag.price = price;
-      if (reel) bag.reel = reel; else delete bag.reel;
-      bag.stock = stock;
-      bag.images = extraUrls.length ? [imagePath || bag.image, ...extraUrls] : (imagePath ? [imagePath] : (bag.images || []));
-      if (bag.images.length) bag.images = bag.images.filter((u, i, a) => u && a.indexOf(u) === i);
-      if (imagePath) bag.image = imagePath;
-      await apiPublish();
+      const targetId = editingId;
+      await apiMutateAndPublish(() => {
+        const bag = bags.find(b => b.id === targetId);
+        if (!bag) throw new Error('Item no longer exists — refresh admin');
+        bag.name = name;
+        bag.category = category;
+        bag.description = desc;
+        bag.price = price;
+        if (reel) bag.reel = reel; else delete bag.reel;
+        bag.stock = stock;
+        bag.images = extraUrls.length ? [imagePath || bag.image, ...extraUrls] : (imagePath ? [imagePath] : (bag.images || []));
+        if (bag.images.length) bag.images = bag.images.filter((u, i, a) => u && a.indexOf(u) === i);
+        if (imagePath) bag.image = imagePath;
+      });
       showToast('Item updated and live.');
     } else {
       if (!stagedImage) { showToast('Add an item image.'); setSaving(false); return; }
@@ -554,8 +572,7 @@ async function saveItem() {
       const newBag = { id, name, category, description: desc, price, stock, sales: [], image: imagePath, createdAt: new Date().toISOString() };
       if (extraUrls.length) newBag.images = [imagePath, ...extraUrls];
       if (reel) newBag.reel = reel;
-      bags.unshift(newBag);
-      await apiPublish();
+      await apiMutateAndPublish(() => { bags.unshift(newBag); });
       showToast('Item added and live.');
     }
     resetForm();
@@ -627,12 +644,14 @@ function editItem(id) {
 
 async function deleteItem(id) {
   if (!await confirmAction('Delete this item? You can restore it from Trash below.', 'Delete')) return;
-  const _idx = bags.findIndex(b => b.id === id);
-  const _removed = _idx === -1 ? null : bags[_idx];
-  bags = bags.filter(b => b.id !== id);
+  let removed = null, removedIdx = -1;
   try {
-    await apiPublish();
-    if (_removed) trashPush([{ item: _removed, index: _idx }]);
+    await apiMutateAndPublish(() => {
+      removedIdx = bags.findIndex(b => b.id === id);
+      removed = removedIdx === -1 ? null : bags[removedIdx];
+      bags = bags.filter(b => b.id !== id);
+    });
+    if (removed) trashPush([{ item: removed, index: removedIdx }]);
     renderList();
     renderDashboard();
     renderInventory();
@@ -683,56 +702,63 @@ function openSaleModal(id) {
 function closeSaleModal() { saleModal.style.display = 'none'; pendingSaleId = null; }
 
 document.getElementById('saleSaveBtn').addEventListener('click', async () => {
-  const bag = bags.find(b => b.id === pendingSaleId);
-  if (!bag) return;
+  const targetId = pendingSaleId;
+  const curBag = bags.find(b => b.id === targetId);
+  if (!curBag) return;
   const size = saleSizeInput.value;
   const qty = parseInt(saleQtyInput.value, 10) || 1;
-  const salePrice = parseInt(salePriceInput.value, 10) || bag.price;
-
-  // Thrift: a sold piece is gone. Zero the stock for that size; no restock.
-  if (bag.stock && bag.stock[size] !== undefined) {
-    bag.stock[size] = Math.max(0, bag.stock[size] - qty);
-  }
-
-  if (!bag.sales) bag.sales = [];
-  bag.sales.push({
+  const salePrice = parseInt(salePriceInput.value, 10) || curBag.price;
+  const sale = {
     size, qty, salePrice,
     buyerName: buyerName.value.trim(),
     buyerPhone: buyerPhone.value.trim(),
     notes: buyerNotes.value.trim(),
     soldAt: new Date().toISOString(),
-  });
-
+  };
   closeSaleModal();
   try {
-    await apiPublish();
+    let soldBag = null;
+    await apiMutateAndPublish(() => {
+      const bag = bags.find(b => b.id === targetId);
+      if (!bag) throw new Error('Item no longer exists — refresh admin');
+      // Thrift: a sold piece is gone. Zero the stock for that size; no restock.
+      if (bag.stock && bag.stock[size] !== undefined) {
+        bag.stock[size] = Math.max(0, bag.stock[size] - qty);
+      }
+      if (!bag.sales) bag.sales = [];
+      bag.sales.push(sale);
+      soldBag = bag;
+    });
     renderList();
     renderDashboard();
     renderInventory();
     showToast(`Sale recorded: ${qty}× ${size}.`);
-    if (buyerName.value.trim() || buyerPhone.value.trim()) sendBuyerToGHL(bag, bag.sales[bag.sales.length - 1]);
+    if (sale.buyerName || sale.buyerPhone) sendBuyerToGHL(soldBag, sale);
   } catch (err) { showToast('Error: ' + err.message); }
 });
 
 document.getElementById('saleSkipBtn')?.addEventListener('click', async () => {
   // One-click thrift sale: no buyer info, qty 1, first available size.
-  const bag = bags.find(b => b.id === pendingSaleId);
-  if (!bag) return;
+  const targetId = pendingSaleId;
+  const curBag = bags.find(b => b.id === targetId);
+  if (!curBag) return;
   const size = saleSizeInput.value || 'One size';
-
-  if (bag.stock && bag.stock[size] !== undefined) {
-    bag.stock[size] = Math.max(0, bag.stock[size] - 1);
-  }
-  if (!bag.sales) bag.sales = [];
-  bag.sales.push({
-    size, qty: 1, salePrice: bag.price,
+  const sale = {
+    size, qty: 1, salePrice: curBag.price,
     buyerName: '', buyerPhone: '', notes: '',
     soldAt: new Date().toISOString(),
-  });
-
+  };
   closeSaleModal();
   try {
-    await apiPublish();
+    await apiMutateAndPublish(() => {
+      const bag = bags.find(b => b.id === targetId);
+      if (!bag) throw new Error('Item no longer exists — refresh admin');
+      if (bag.stock && bag.stock[size] !== undefined) {
+        bag.stock[size] = Math.max(0, bag.stock[size] - 1);
+      }
+      if (!bag.sales) bag.sales = [];
+      bag.sales.push(sale);
+    });
     renderList();
     renderDashboard();
     renderInventory();
@@ -748,17 +774,18 @@ let editingSale = null; // { bagId, soldAt }
 
 async function undoSale(bagId, soldAt) {
   if (!await confirmAction('Undo this sale? The quantity goes back into stock.', 'Undo sale')) return;
-  const bag = bags.find(b => b.id === bagId);
-  if (!bag) return;
-  const idx = (bag.sales || []).findIndex(x => x.soldAt === soldAt);
-  if (idx === -1) return;
-  const s = bag.sales[idx];
-  if (bag.stock && bag.stock[s.size] !== undefined) {
-    bag.stock[s.size] = (Number(bag.stock[s.size]) || 0) + (Number(s.qty) || 1);
-  }
-  bag.sales.splice(idx, 1);
   try {
-    await apiPublish();
+    await apiMutateAndPublish(() => {
+      const bag = bags.find(b => b.id === bagId);
+      if (!bag) throw new Error('Item no longer exists — refresh admin');
+      const idx = (bag.sales || []).findIndex(x => x.soldAt === soldAt);
+      if (idx === -1) throw new Error('Sale not found — refresh admin');
+      const s = bag.sales[idx];
+      if (bag.stock && bag.stock[s.size] !== undefined) {
+        bag.stock[s.size] = (Number(bag.stock[s.size]) || 0) + (Number(s.qty) || 1);
+      }
+      bag.sales.splice(idx, 1);
+    });
     renderList();
     renderDashboard();
     renderInventory();
@@ -786,27 +813,35 @@ function closeEditSale() { document.getElementById('editSaleModal').style.displa
 
 document.getElementById('editSaleSaveBtn').addEventListener('click', async () => {
   if (!editingSale) return;
-  const bag = bags.find(b => b.id === editingSale.bagId);
-  if (!bag) return;
-  const s = (bag.sales || []).find(x => x.soldAt === editingSale.soldAt);
-  if (!s) return;
-  const newSize = document.getElementById('editSaleSize').value.trim() || s.size;
+  const { bagId, soldAt } = editingSale;
+  // Read form values now (DOM); apply against the FRESH sale record in the mutator.
+  const formSize = document.getElementById('editSaleSize').value.trim();
   const newQty = parseInt(document.getElementById('editSaleQty').value, 10) || 1;
-  const newPrice = parseInt(document.getElementById('editSalePrice').value, 10) || bag.price;
-  // Correct stock: put the old quantity back, then take the new quantity out
-  if (bag.stock) {
-    if (bag.stock[s.size] !== undefined) bag.stock[s.size] = (Number(bag.stock[s.size]) || 0) + (Number(s.qty) || 1);
-    if (bag.stock[newSize] !== undefined) bag.stock[newSize] = Math.max(0, (Number(bag.stock[newSize]) || 0) - newQty);
-  }
-  s.size = newSize;
-  s.qty = newQty;
-  s.salePrice = newPrice;
-  s.buyerName = document.getElementById('editBuyerName').value.trim();
-  s.buyerPhone = document.getElementById('editBuyerPhone').value.trim();
-  s.notes = document.getElementById('editBuyerNotes').value.trim();
+  const formPrice = parseInt(document.getElementById('editSalePrice').value, 10);
+  const newBuyerName = document.getElementById('editBuyerName').value.trim();
+  const newBuyerPhone = document.getElementById('editBuyerPhone').value.trim();
+  const newNotes = document.getElementById('editBuyerNotes').value.trim();
   closeEditSale();
   try {
-    await apiPublish();
+    await apiMutateAndPublish(() => {
+      const bag = bags.find(b => b.id === bagId);
+      if (!bag) throw new Error('Item no longer exists — refresh admin');
+      const s = (bag.sales || []).find(x => x.soldAt === soldAt);
+      if (!s) throw new Error('Sale not found — refresh admin');
+      const newSize = formSize || s.size;
+      const newPrice = isNaN(formPrice) ? (s.salePrice != null ? s.salePrice : bag.price) : formPrice;
+      // Correct stock: put the old quantity back, then take the new quantity out
+      if (bag.stock) {
+        if (bag.stock[s.size] !== undefined) bag.stock[s.size] = (Number(bag.stock[s.size]) || 0) + (Number(s.qty) || 1);
+        if (bag.stock[newSize] !== undefined) bag.stock[newSize] = Math.max(0, (Number(bag.stock[newSize]) || 0) - newQty);
+      }
+      s.size = newSize;
+      s.qty = newQty;
+      s.salePrice = newPrice;
+      s.buyerName = newBuyerName;
+      s.buyerPhone = newBuyerPhone;
+      s.notes = newNotes;
+    });
     renderList();
     renderDashboard();
     renderInventory();
@@ -1100,13 +1135,16 @@ function bulkSelectAll() { bags.forEach(b => bulkSelected.add(b.id)); renderList
 
 async function bulkDelete() {
   if (!await confirmAction(`Delete ${bulkSelected.size} item(s)? You can restore them from Trash below.`, 'Delete')) return;
-  const _removed = [];
-  bags.forEach((b, i) => { if (bulkSelected.has(b.id)) _removed.push({ item: b, index: i }); });
-  bags = bags.filter(b => !bulkSelected.has(b.id));
+  const ids = new Set(bulkSelected);
   bulkSelected.clear();
+  let removed = [];
   try {
-    await apiPublish();
-    trashPush(_removed);
+    await apiMutateAndPublish(() => {
+      removed = [];
+      bags.forEach((b, i) => { if (ids.has(b.id)) removed.push({ item: b, index: i }); });
+      bags = bags.filter(b => !ids.has(b.id));
+    });
+    trashPush(removed);
     renderList(); renderInventory(); renderDashboard();
     renderTrash();
     showToast(`Deleted — restore from Trash.`);
@@ -1116,13 +1154,15 @@ async function bulkDelete() {
 async function bulkSetCategory() {
   const cat = await chooseCategory();
   if (!cat) return;
-  bags.forEach(b => { if (bulkSelected.has(b.id)) b.category = cat; });
+  const ids = new Set(bulkSelected);
+  const n = ids.size;
   try {
-    await apiPublish();
-    renderList(); renderInventory();
-    showToast(`Set ${bulkSelected.size} item(s) to "${cat}".`);
+    await apiMutateAndPublish(() => {
+      bags.forEach(b => { if (ids.has(b.id)) b.category = cat; });
+    });
     bulkSelected.clear();
-    renderList();
+    renderList(); renderInventory();
+    showToast(`Set ${n} item(s) to "${cat}".`);
   } catch (err) { showToast('Sync failed: ' + err.message); }
 }
 
