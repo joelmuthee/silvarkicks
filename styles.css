@@ -1102,6 +1102,7 @@ html { scroll-behavior: smooth; }
 .admin-card-stockshort { font-size: 12px; font-weight: 600; color: var(--ink-soft); }
 .admin-card-stockshort.sold { color: #b00020; }
 .admin-card-stock { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
+.admin-card-added { font-size: 11px; color: var(--ink-faint); margin-top: 3px; }
 .admin-card-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
 .admin-card-actions button { flex: 1; padding: 7px 8px; font-size: 12px; border-radius: 6px; border: 1px solid var(--line); background: #fff; cursor: pointer; font-family: inherit; transition: 0.15s; }
 .admin-card-actions button:hover { background: var(--ink); color: var(--gold-light); border-color: var(--ink); }

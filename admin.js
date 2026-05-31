@@ -895,6 +895,20 @@ function relTime(iso) {
   return new Date(iso).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' });
 }
 
+// Best-effort "added to the website" timestamp: explicit createdAt, else the IG
+// post date (takenAt; epoch-seconds or ISO), else the millis baked into a manual id.
+// Returns an ISO string, or null if nothing usable.
+function itemAddedAt(bag) {
+  if (bag.createdAt) return bag.createdAt;
+  if (bag.takenAt != null) {
+    const t = bag.takenAt;
+    if (typeof t === 'number') return new Date(t < 1e12 ? t * 1000 : t).toISOString();
+    return t;
+  }
+  const m = String(bag.id || '').match(/_(\d{10,})/);
+  return m ? new Date(parseInt(m[1], 10)).toISOString() : null;
+}
+
 function renderDashboard() {
   const now = new Date();
   const buckets = [
@@ -1091,6 +1105,7 @@ function renderList() {
     const stockSummary = Object.entries(bag.stock || {}).map(([sz, q]) => `${sz}:${q}`).join(' · ') || 'No stock set';
     const stockShort = units === 0 ? 'Sold' : `${units} left`;
     const checked = bulkSelected.has(bag.id);
+    const addedIso = itemAddedAt(bag);
     return `
     <div class="admin-card ${checked ? 'bulk-selected' : ''}">
       <label class="bulk-check" title="Select for bulk actions">
@@ -1105,6 +1120,7 @@ function renderList() {
           <span class="admin-card-stockshort ${units === 0 ? 'sold' : ''}">${stockShort}</span>
         </div>
         <div class="admin-card-stock">${units} in stock · ${sold} sold | ${stockSummary}</div>
+        ${addedIso ? `<div class="admin-card-added" title="Added ${new Date(addedIso).toLocaleString('en-KE')}">Added ${relTime(addedIso)}</div>` : ''}
         <div class="admin-card-actions">
           <button onclick="editItem('${bag.id}')">Edit</button>
           <button onclick="openSaleModal('${bag.id}')" style="background:#f0faf4;border-color:#b0d8c0;color:#1a7a40;">Sell</button>
