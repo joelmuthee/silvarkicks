@@ -72,6 +72,7 @@
     <a href="#salesDash">Sales</a>
     <a href="#invDash">Inventory</a>
     <a href="#broadcastDash">WhatsApp Marketing</a>
+    <a href="#insightsDash">Insights</a>
     <a href="#allItems">All items <span class="admin-nav-count" id="navItemCount"></span></a>
     <a href="#trashSection">Trash <span class="admin-nav-count" id="navTrashCount"></span></a>
   </nav>
@@ -136,6 +137,32 @@
       </div>
       <p id="broadcastStatus" style="font-size:13px;color:var(--ink-soft);margin-top:10px;"></p>
       <div id="broadcastStepper" class="broadcast-stepper" style="display:none;margin-top:12px;"></div>
+    </div>
+  </section>
+
+  <section class="dash" id="insightsDash">
+    <h2 class="dash-title">Insights <span class="insights-badge">Whole shop · all visitors</span></h2>
+    <p class="insights-disclosure">
+      What's being viewed and tapped on the public store, summed live on the server across every visitor on every device. Updates a few seconds after a shopper acts. For raw pageview and unique-visitor totals you can also add Cloudflare Web Analytics (free, one-line beacon), but the per-item numbers below already cover what to source and what's converting.
+    </p>
+    <div class="inv-kpi-grid" id="insightsKpiGrid"></div>
+    <div class="dash-grid" style="margin-top:18px;">
+      <div class="dash-card">
+        <h3>Most viewed</h3>
+        <div id="insightsTopViews" class="recent-list"></div>
+      </div>
+      <div class="dash-card">
+        <h3>Most enquired about</h3>
+        <div id="insightsTopEnquiries" class="recent-list"></div>
+      </div>
+    </div>
+    <div class="search-gaps" id="searchGapsCard">
+      <h4>⭐ Searches with no results</h4>
+      <p class="search-gaps-hint">What shoppers typed in the search bar that returned nothing. Strong signal for what to source next.</p>
+      <div class="search-gaps-pills" id="searchGapsPills"></div>
+    </div>
+    <div class="insights-actions">
+      <button class="btn-admin danger" id="insightsResetBtn">Reset insights</button>
     </div>
   </section>
 

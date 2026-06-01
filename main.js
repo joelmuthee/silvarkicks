@@ -244,6 +244,25 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
     return q.split(/\s+/).every(tok => hay.includes(tok));
   }
 
+  // Per-item activity tracking. Writes localStorage (offline echo) AND beacons
+  // the worker so the admin sees site-wide totals across all visitors/devices.
+  const INSIGHTS_KEY = 'silvar_analytics';
+  function track(metric, key) {
+    if (!key && key !== 0) return;
+    try {
+      const data = JSON.parse(localStorage.getItem(INSIGHTS_KEY) || '{}');
+      data[metric] = data[metric] || {};
+      data[metric][key] = (data[metric][key] || 0) + 1;
+      localStorage.setItem(INSIGHTS_KEY, JSON.stringify(data));
+    } catch {}
+    try {
+      const payload = JSON.stringify({ metric, key });
+      const blob = new Blob([payload], { type: 'text/plain' });
+      if (navigator.sendBeacon) navigator.sendBeacon(`${API_BASE}/api/track`, blob);
+      else fetch(`${API_BASE}/api/track`, { method: 'POST', body: payload, keepalive: true }).catch(() => {});
+    } catch {}
+  }
+
   function render() {
     buildCatPills();
     buildSizePills();
@@ -255,6 +274,8 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
       const catOk = currentCat === 'all' || item.category === currentCat;
       return availOk && catOk && sizeMatch(item) && searchMatch(item, q);
     });
+
+    if (q && filtered.length === 0) track('searchNoResults', q);
 
     // Sort
     if (currentSort === 'newest') {
@@ -289,7 +310,7 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
       const heartOn = wishlist.has(item.id);
       const newBadge = isNew(item) ? '<span class="badge-new">NEW</span>' : '';
       return `
-      <article class="card fade-up ${soldOut ? 'sold' : ''}">
+      <article class="card fade-up ${soldOut ? 'sold' : ''}" data-id="${item.id}">
         <div class="card-img-wrap" data-action="zoom" data-id="${item.id}">
           <img class="card-img" src="${item.image}?${IMG_VERSION}" alt="${escapeHtml(item.name)}" loading="lazy">
           ${newBadge}
@@ -464,7 +485,18 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
   // WhatsApp with the /p/<id> share page previewing as a photo card. No app picker.
   gallery.addEventListener('click', e => {
     const heart = e.target.closest('[data-action="wishlist"]');
-    if (heart) { e.stopPropagation(); toggleWishlist(heart.dataset.id); return; }
+    if (heart) {
+      e.stopPropagation();
+      const id = heart.dataset.id;
+      const wasOn = wishlist.has(id);
+      toggleWishlist(id);
+      if (!wasOn && wishlist.has(id)) track('itemWishlist', id);
+      return;
+    }
+    const enquire = e.target.closest('.btn-card.primary');
+    if (enquire) { const card = enquire.closest('[data-id]'); if (card) track('itemEnquiries', card.dataset.id); return; }
+    const ig = e.target.closest('.btn-ig');
+    if (ig) { const card = ig.closest('[data-id]'); if (card) track('itemIgClicks', card.dataset.id); return; }
   });
 
   // Fade-in-up on scroll (respects prefers-reduced-motion)
@@ -500,6 +532,7 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
     const id = wrap.dataset.id;
     const item = items.find(i => i.id === id);
     if (!item) return;
+    track('itemViews', id);
     lightboxImg.src = item.image + '?' + IMG_VERSION;
     lightboxImg.alt = item.name;
     lightboxCap.textContent = `${item.name} · ${fmtPrice(item.price)}${isSoldOut(item) ? ' · SOLD' : ''}`;

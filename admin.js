@@ -1624,6 +1624,79 @@ async function commitIgSync() {
   }
 }
 
+// ====== INSIGHTS (site-wide, aggregated on the worker) ======
+const INSIGHTS_KEY = 'silvar_analytics';
+function getInsights() {
+  try { return JSON.parse(localStorage.getItem(INSIGHTS_KEY) || '{}'); } catch { return {}; }
+}
+// Pull the shop-wide aggregate from the worker. Falls back to this device's
+// localStorage only if the worker is unreachable (offline / down).
+async function fetchInsights() {
+  try {
+    const res = await fetch(`${API_BASE}/api/insights`, { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
+async function renderInsights() {
+  if (!document.getElementById('insightsKpiGrid')) return;
+  const a = (await fetchInsights()) || getInsights();
+  const views = a.itemViews || {};
+  const enqs = a.itemEnquiries || {};
+  const igClicks = a.itemIgClicks || {};
+  const wishlist = a.itemWishlist || {};
+  const searchNoResults = a.searchNoResults || {};
+
+  const sum = m => Object.values(m).reduce((s, n) => s + (n || 0), 0);
+  document.getElementById('insightsKpiGrid').innerHTML = `
+    <div class="inv-kpi"><div class="inv-kpi-label">Item views</div><div class="inv-kpi-val">${sum(views)}</div></div>
+    <div class="inv-kpi"><div class="inv-kpi-label">Enquiries</div><div class="inv-kpi-val">${sum(enqs)}</div></div>
+    <div class="inv-kpi"><div class="inv-kpi-label">Saved</div><div class="inv-kpi-val">${sum(wishlist)}</div></div>
+    <div class="inv-kpi"><div class="inv-kpi-label">IG clicks</div><div class="inv-kpi-val">${sum(igClicks)}</div></div>
+  `;
+
+  function topList(map, limit = 6) {
+    const rows = Object.entries(map)
+      .map(([id, n]) => ({ b: bags.find(b => b.id === id), n }))
+      .filter(r => r.b)
+      .sort((x, y) => y.n - x.n)
+      .slice(0, limit);
+    return rows.length
+      ? rows.map(({ b, n }) => `
+          <div class="recent-row">
+            <img src="${b.image}" alt="">
+            <div style="flex:1;min-width:0;"><div class="recent-name">${escapeHtml(b.name)}</div><div class="recent-meta">${n} ${n === 1 ? 'time' : 'times'}</div></div>
+          </div>`).join('')
+      : '<p class="insights-empty">No data yet.</p>';
+  }
+  document.getElementById('insightsTopViews').innerHTML = topList(views);
+  document.getElementById('insightsTopEnquiries').innerHTML = topList(enqs);
+
+  // ⭐ The killer feature: searches that returned nothing = unmet demand
+  const gaps = Object.entries(searchNoResults).sort((x, y) => y[1] - x[1]).slice(0, 30);
+  const pillsEl = document.getElementById('searchGapsPills');
+  if (gaps.length) {
+    pillsEl.innerHTML = gaps.map(([q, n]) =>
+      `<span class="search-gap-pill">${escapeHtml(q)}<span class="count">${n}</span></span>`
+    ).join('');
+  } else {
+    pillsEl.innerHTML = '<p class="insights-empty" style="margin:0;">No empty searches yet. Once visitors search for something the catalogue doesn\'t have, it shows up here as a sourcing hint.</p>';
+  }
+}
+
+const insightsResetBtn = document.getElementById('insightsResetBtn');
+if (insightsResetBtn) {
+  insightsResetBtn.addEventListener('click', async () => {
+    if (!await confirmAction('Reset Insights for the whole shop? This clears the site-wide totals from every device and cannot be undone.', 'Reset')) return;
+    try {
+      await fetch(`${API_BASE}/api/insights-reset`, { method: 'POST', headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } });
+    } catch {}
+    localStorage.removeItem(INSIGHTS_KEY);
+    await renderInsights();
+    showToast('Insights reset for the whole shop.');
+  });
+}
+
 async function init() {
   showToast('Loading…');
   await loadData();
@@ -1632,6 +1705,7 @@ async function init() {
   renderDashboard();
   renderInventory();
   renderTrash();
+  renderInsights();
   renderBroadcastSelected();
   renderBroadcastPicker();
   renderBroadcastRecipients();
