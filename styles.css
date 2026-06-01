@@ -715,6 +715,10 @@ html { scrollbar-color: var(--gold) var(--bg); scrollbar-width: thin; }
   font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 99px; margin-left: 2px;
 }
 .admin-nav a:hover .admin-nav-count { background: rgba(255,255,255,0.15); color: var(--gold-light); }
+/* Scrollspy — the section you're currently viewing */
+.admin-nav a.active { background: var(--ink); color: var(--gold-light); border-color: var(--ink); }
+.admin-nav a.active .admin-nav-count { background: rgba(255,255,255,0.15); color: var(--gold-light); }
+.admin-nav a.admin-nav-cta.active { background: var(--gold-deep); color: #fff; border-color: var(--gold-deep); }
 
 html { scroll-behavior: smooth; }
 #addForm, #salesDash, #invDash, #broadcastDash, #allItems { scroll-margin-top: 80px; }
