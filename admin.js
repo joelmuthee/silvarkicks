@@ -485,7 +485,7 @@ document.getElementById('addCustomSizeBtn')?.addEventListener('click', () => add
 // ====== AI DESCRIPTION ======
 document.getElementById('aiBtn').addEventListener('click', () => {
   const name = document.getElementById('nameInput').value.trim();
-  const cat = document.getElementById('categoryInput').value;
+  const cat = getCategoryValue();
   if (!name) { showToast('Enter the item name first.'); return; }
   document.getElementById('descInput').value = generateDescription(name, cat);
 });
@@ -530,7 +530,7 @@ async function saveItem() {
   const priceParsed = parseInt(priceRaw, 10);
   const price = priceRaw === '' ? 0 : priceParsed;
   const desc = document.getElementById('descInput').value.trim();
-  const category = document.getElementById('categoryInput').value || '';
+  const category = getCategoryValue();
   const reel = document.getElementById('reelInput')?.value.trim() || '';
   const stock = getStockFromForm();
 
@@ -592,11 +592,90 @@ async function saveItem() {
   }
 }
 
+// ===== Category field helpers =====
+// The form category <select> is a fixed list, but the shop owner can add their
+// own. Picking "+ Add new category…" reveals a free-text box; any category that
+// already exists on an item is auto-injected so it shows up for everyone after.
+function toggleNewCategoryInput() {
+  const sel = document.getElementById('categoryInput');
+  const box = document.getElementById('categoryNewInput');
+  if (!sel || !box) return;
+  if (sel.value === '__new__') {
+    box.style.display = '';
+    box.focus();
+  } else {
+    box.style.display = 'none';
+    box.value = '';
+  }
+}
+
+// Read the chosen category, resolving the "+ Add new…" free-text path.
+function getCategoryValue() {
+  const sel = document.getElementById('categoryInput');
+  if (!sel) return '';
+  if (sel.value === '__new__') {
+    return document.getElementById('categoryNewInput').value.trim();
+  }
+  return sel.value || '';
+}
+
+// Set the select to a category, injecting it as an option if it isn't a
+// built-in one (so editing a custom-category item shows it selected).
+function setCategoryValue(cat) {
+  const sel = document.getElementById('categoryInput');
+  const box = document.getElementById('categoryNewInput');
+  if (!sel) return;
+  if (box) { box.style.display = 'none'; box.value = ''; }
+  const c = cat || '';
+  if (!c) { sel.value = ''; return; }
+  const exists = [...sel.options].some(o => o.value === c);
+  if (!exists) ensureCategoryOption(c);
+  sel.value = c;
+}
+
+// Ensure a category exists as a <option> in the select. Custom (owner-added)
+// categories land in a dedicated "Your categories" group above "+ Add new…".
+function ensureCategoryOption(cat) {
+  const sel = document.getElementById('categoryInput');
+  if (!sel || !cat) return;
+  if ([...sel.options].some(o => o.value === cat)) return;
+  let group = document.getElementById('customCatGroup');
+  if (!group) {
+    group = document.createElement('optgroup');
+    group.id = 'customCatGroup';
+    group.label = 'Your categories';
+    const newOpt = [...sel.options].find(o => o.value === '__new__');
+    sel.insertBefore(group, newOpt || null);
+  }
+  const opt = document.createElement('option');
+  opt.value = cat;
+  opt.textContent = cat;
+  group.appendChild(opt);
+}
+
+// Sweep every category already used on an item into the dropdown, so an
+// owner-added category becomes a permanent choice for all future items.
+// Works for flat OR optgroup selects: the built-in option values are
+// snapshotted once (before any custom injection) so we never re-classify
+// a built-in as custom.
+let _builtinCatValues = null;
+function syncCustomCategories() {
+  const sel = document.getElementById('categoryInput');
+  if (!sel) return;
+  if (!_builtinCatValues) {
+    _builtinCatValues = new Set([...sel.options].map(o => o.value).filter(v => v && v !== '__new__'));
+  }
+  [...new Set(bags.map(b => b.category).filter(Boolean))]
+    .filter(c => !_builtinCatValues.has(c))
+    .sort((a, b) => a.localeCompare(b))
+    .forEach(ensureCategoryOption);
+}
+
 function resetForm() {
   editingId = null;
   document.getElementById('editingId').value = '';
   document.getElementById('nameInput').value = '';
-  document.getElementById('categoryInput').value = '';
+  setCategoryValue('');
   document.getElementById('descInput').value = '';
   document.getElementById('priceInput').value = '';
   const reelEl = document.getElementById('reelInput');
@@ -627,7 +706,7 @@ function editItem(id) {
   editingId = id;
   document.getElementById('editingId').value = id;
   document.getElementById('nameInput').value = bag.name;
-  document.getElementById('categoryInput').value = bag.category || '';
+  setCategoryValue(bag.category || '');
   document.getElementById('descInput').value = bag.description || '';
   document.getElementById('priceInput').value = bag.price;
   const reelEl = document.getElementById('reelInput');
@@ -1091,6 +1170,7 @@ function matchesSearch(bag, q) {
 }
 
 function renderList() {
+  syncCustomCategories();
   const list = document.getElementById('adminList');
   document.getElementById('bagCount').textContent = bags.length;
   const navCount = document.getElementById('navItemCount');
@@ -1923,6 +2003,8 @@ if (insightsResetBtn) {
 }
 
 async function init() {
+  const catSel = document.getElementById('categoryInput');
+  if (catSel) catSel.addEventListener('change', toggleNewCategoryInput);
   showToast('Loading…');
   await loadData();
   renderSuspendedBanner();
