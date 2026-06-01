@@ -7,6 +7,7 @@ const UK_SIZE_FIXED = ['UK4','UK5','UK6','UK7','UK8','UK9','UK10','UK11','UK12',
 
 let bags = [];
 let settings = {};
+let clients = []; // manually-added clients (server-synced); sale buyers are derived separately
 let editingId = null;
 let stagedImage = null;
 let stagedExtras = [];
@@ -61,7 +62,7 @@ async function apiPublish() {
   const res = await fetch(`${API_BASE}/api/bulk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ADMIN_TOKEN}` },
-    body: JSON.stringify({ bags, settings }),
+    body: JSON.stringify({ bags, settings, clients }),
   });
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `Save failed: ${res.status}`); }
 }
@@ -78,6 +79,7 @@ async function apiMutateAndPublish(mutate) {
   const json = await res.json();
   bags = Array.isArray(json.bags) ? json.bags : [];
   settings = json.settings || {};
+  clients = Array.isArray(json.clients) ? json.clients : [];
   await mutate();
   await apiPublish();
 }
@@ -88,6 +90,7 @@ async function loadData() {
   const json = await res.json();
   bags = json.bags || [];
   settings = json.settings || {};
+  clients = Array.isArray(json.clients) ? json.clients : [];
   accountSuspended = !!json.suspended;
 }
 
@@ -1211,6 +1214,228 @@ window.restoreItem = restoreItem;
 window.deleteForever = deleteForever;
 window.emptyTrash = emptyTrash;
 
+// ====== CLIENTS (free CRM roster) ======
+// Who has bought, with what they bought, total spend, and one-tap WhatsApp.
+// New-stock model: buyers live in each bag's sales[] (deduped by phone).
+let clientsQuery = '';
+let clientsSort = 'recent';
+function clientsLedger() {
+  const map = new Map();
+  for (const bag of bags) {
+    for (const s of (bag.sales || [])) {
+      if (!s || !s.buyerPhone) continue;
+      const phone = String(s.buyerPhone).replace(/[^0-9]/g, '');
+      if (phone.length < 9) continue;
+      const at = new Date(s.soldAt || 0).getTime();
+      const amount = Number(s.salePrice || bag.price || 0) * (Number(s.qty) || 1);
+      let c = map.get(phone);
+      if (!c) { c = { phone, name: '', purchases: [], spend: 0, lastAt: 0 }; map.set(phone, c); }
+      c.purchases.push({ bagName: bag.name, size: s.size || '', qty: Number(s.qty) || 1, amount, at: s.soldAt });
+      c.spend += amount;
+      if (at >= c.lastAt) { c.lastAt = at; if (s.buyerName) c.name = s.buyerName; }
+      else if (!c.name && s.buyerName) c.name = s.buyerName;
+    }
+  }
+  // Overlay manually-added clients (may have zero purchases yet).
+  for (const mc of (clients || [])) {
+    if (!mc || !mc.phone) continue;
+    const phone = String(mc.phone).replace(/[^0-9]/g, '');
+    if (phone.length < 9) continue;
+    let c = map.get(phone);
+    if (!c) { c = { phone, name: '', purchases: [], spend: 0, lastAt: 0 }; map.set(phone, c); }
+    c.manualId = mc.id;
+    if (mc.note) c.note = mc.note;
+    if (!c.name && mc.name) c.name = mc.name;
+    if (mc.createdAt) c.addedAt = mc.createdAt;
+  }
+  return [...map.values()];
+}
+// Normalise a Kenyan number to wa.me international form (254…, no +).
+function clientWaPhone(p) {
+  let d = String(p).replace(/[^0-9]/g, '');
+  if (d.startsWith('0')) d = '254' + d.slice(1);
+  else if (d.length === 9) d = '254' + d;
+  return d;
+}
+function renderClients() {
+  const listEl = document.getElementById('clientsList');
+  if (!listEl) return;
+  const ledger = clientsLedger();
+  const totalSpend = ledger.reduce((s, c) => s + c.spend, 0);
+  const repeat = ledger.filter(c => c.purchases.length >= 2).length;
+  const avg = ledger.length ? Math.round(totalSpend / ledger.length) : 0;
+
+  const nav = document.getElementById('navClientsCount'); if (nav) nav.textContent = ledger.length || '';
+
+  const kpi = document.getElementById('clientsKpiGrid');
+  if (kpi) kpi.innerHTML = `
+    <div class="inv-kpi"><div class="inv-kpi-label">Clients</div><div class="inv-kpi-val">${ledger.length}</div><div class="inv-kpi-sub">${repeat} repeat buyer${repeat === 1 ? '' : 's'}</div></div>
+    <div class="inv-kpi success"><div class="inv-kpi-label">Total spent</div><div class="inv-kpi-val">${fmtKsh(totalSpend)}</div><div class="inv-kpi-sub">across all clients</div></div>
+    <div class="inv-kpi"><div class="inv-kpi-label">Avg per client</div><div class="inv-kpi-val">${fmtKsh(avg)}</div><div class="inv-kpi-sub">lifetime value</div></div>
+    <div class="inv-kpi"><div class="inv-kpi-label">Repeat rate</div><div class="inv-kpi-val">${ledger.length ? Math.round(repeat / ledger.length * 100) : 0}%</div><div class="inv-kpi-sub">bought 2+ times</div></div>
+  `;
+
+  if (!ledger.length) {
+    listEl.innerHTML = '<p style="font-size:13px;color:#999;padding:14px;">No clients yet. When you record a sale and save the buyer\'s name and phone, they show up here so you can message them again.</p>';
+    return;
+  }
+  const q = clientsQuery.toLowerCase();
+  const rows = ledger
+    .filter(c => !q || (c.name || '').toLowerCase().includes(q) || c.phone.includes(q))
+    .sort((a, b) =>
+      clientsSort === 'spend' ? b.spend - a.spend :
+      clientsSort === 'purchases' ? b.purchases.length - a.purchases.length :
+      b.lastAt - a.lastAt);
+  if (!rows.length) { listEl.innerHTML = '<p style="font-size:13px;color:#999;padding:14px;">No clients match your search.</p>'; return; }
+  listEl.innerHTML = rows.map(c => {
+    const items = c.purchases.slice()
+      .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+      .map(p => `<span class="client-item">${escapeHtml(p.bagName)}${p.size ? ' · ' + escapeHtml(p.size) : ''} × ${p.qty} · ${fmtKsh(p.amount)}</span>`).join('');
+    const has = c.purchases.length;
+    const when = has ? `last ${relTime(new Date(c.lastAt).toISOString())}`
+                     : (c.addedAt ? `added ${relTime(c.addedAt)}` : 'no purchases yet');
+    const manualTag = c.manualId ? '<span class="client-tag">Added manually</span>' : '';
+    const noteLine = c.note ? `<div class="client-note">${escapeHtml(c.note)}</div>` : '';
+    const removeBtn = c.manualId ? `<button class="btn-admin danger" onclick="removeClient('${c.manualId}')">Remove</button>` : '';
+    return `
+      <div class="client-row">
+        <div class="client-row-main">
+          <div class="client-row-name">${escapeHtml(c.name || 'Unnamed buyer')}${manualTag}</div>
+          <div class="client-row-sub">${escapeHtml(c.phone)} · ${has} purchase${has === 1 ? '' : 's'} · ${fmtKsh(c.spend)} spent · ${when}</div>
+          ${noteLine}
+          <div class="client-items">${items}</div>
+        </div>
+        <div class="client-row-actions">
+          <button class="btn-admin gold" onclick="clientMessage('${c.phone}')">WhatsApp</button>
+          ${removeBtn}
+        </div>
+      </div>`;
+  }).join('');
+}
+window.clientMessage = phone => {
+  const c = clientsLedger().find(x => x.phone === phone);
+  const first = (c && c.name ? c.name : 'there').split(' ')[0];
+  const msg = `Hi ${first}! Thanks for shopping with Silvarkicks. Fresh pieces just landed. Want me to send you what's new?`;
+  window.open(`https://wa.me/${clientWaPhone(phone)}?text=${encodeURIComponent(msg)}`, '_blank');
+};
+// Manually add / remove a client (server-synced via the clients[] list).
+// ----- "Item bought" autocomplete: type → tappable matches → select one -----
+let acItemId = ''; // selected item id ('' = none / contact-only)
+function acRenderResults(q) {
+  const box = document.getElementById('addClientItemResults');
+  const query = (q || '').toLowerCase();
+  if (!query) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const matches = bags.filter(b => (b.name || '').toLowerCase().includes(query)).slice(0, 12);
+  box.innerHTML = matches.length
+    ? matches.map(b => {
+        const units = Object.values(b.stock || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+        const meta = Object.keys(b.stock || {}).length ? `${units} in stock` : fmtKsh(b.price);
+        return `<button type="button" class="client-item-opt" data-id="${b.id}">${escapeHtml(b.name)}<span>${meta}</span></button>`;
+      }).join('')
+    : '<div class="client-item-empty">No items match.</div>';
+  box.style.display = '';
+}
+function acSelectItem(id) {
+  const bag = bags.find(b => b.id === id);
+  if (!bag) return;
+  acItemId = id;
+  document.getElementById('addClientItemSearch').value = bag.name;
+  document.getElementById('addClientItemResults').style.display = 'none';
+  const sizeSel = document.getElementById('addClientSize');
+  sizeSel.innerHTML = '';
+  const inStock = Object.entries(bag.stock || {}).filter(([, q]) => q > 0);
+  if (inStock.length) {
+    inStock.forEach(([sz, q]) => { const o = document.createElement('option'); o.value = sz; o.textContent = `${sz} (${q} in stock)`; sizeSel.appendChild(o); });
+  } else {
+    const o = document.createElement('option'); o.value = 'One size'; o.textContent = 'One size'; sizeSel.appendChild(o);
+  }
+  document.getElementById('addClientQty').value = 1;
+  document.getElementById('addClientPrice').value = (bag.salePrice > 0 && bag.salePrice < bag.price) ? bag.salePrice : bag.price;
+  document.getElementById('addClientChosen').innerHTML = `Recording a sale for <strong>${escapeHtml(bag.name)}</strong> · <button type="button" id="addClientClearItem">clear</button>`;
+  document.getElementById('addClientChosen').style.display = '';
+  document.getElementById('addClientSaleFields').style.display = '';
+}
+function acClearItem() {
+  acItemId = '';
+  document.getElementById('addClientItemSearch').value = '';
+  document.getElementById('addClientItemResults').style.display = 'none';
+  document.getElementById('addClientChosen').style.display = 'none';
+  document.getElementById('addClientSaleFields').style.display = 'none';
+}
+function openAddClient() {
+  document.getElementById('addClientName').value = '';
+  document.getElementById('addClientPhone').value = '';
+  document.getElementById('addClientNote').value = '';
+  acClearItem();
+  document.getElementById('addClientModal').style.display = 'flex';
+  document.getElementById('addClientName').focus();
+}
+function closeAddClient() { document.getElementById('addClientModal').style.display = 'none'; }
+document.getElementById('clientsAddBtn')?.addEventListener('click', openAddClient);
+document.getElementById('addClientCancelBtn')?.addEventListener('click', closeAddClient);
+document.getElementById('addClientModal')?.addEventListener('click', e => { if (e.target.id === 'addClientModal') closeAddClient(); });
+document.getElementById('addClientItemSearch')?.addEventListener('input', e => {
+  acItemId = '';
+  document.getElementById('addClientChosen').style.display = 'none';
+  document.getElementById('addClientSaleFields').style.display = 'none';
+  acRenderResults(e.target.value.trim());
+});
+document.getElementById('addClientItemResults')?.addEventListener('click', e => {
+  const opt = e.target.closest('.client-item-opt');
+  if (opt) acSelectItem(opt.dataset.id);
+});
+document.getElementById('addClientChosen')?.addEventListener('click', e => {
+  if (e.target.id === 'addClientClearItem') acClearItem();
+});
+document.getElementById('addClientSaveBtn')?.addEventListener('click', async () => {
+  const name = document.getElementById('addClientName').value.trim();
+  const phone = document.getElementById('addClientPhone').value.trim().replace(/[^0-9+]/g, '');
+  const note = document.getElementById('addClientNote').value.trim();
+  if (!name) { showToast('Enter a name.'); return; }
+  if (phone.replace(/[^0-9]/g, '').length < 9) { showToast('Enter a valid phone number.'); return; }
+  const itemId = acItemId;
+  let size, qty, salePrice;
+  if (itemId) {
+    size = document.getElementById('addClientSize').value;
+    qty = parseInt(document.getElementById('addClientQty').value, 10) || 1;
+    salePrice = parseInt(document.getElementById('addClientPrice').value, 10);
+  }
+  const btn = document.getElementById('addClientSaveBtn');
+  btn.disabled = true;
+  try {
+    await apiMutateAndPublish(() => {
+      if (!Array.isArray(clients)) clients = [];
+      const norm = phone.replace(/[^0-9]/g, '');
+      const existing = clients.find(c => String(c.phone).replace(/[^0-9]/g, '') === norm);
+      if (existing) { existing.name = name; existing.note = note; }
+      else clients.push({ id: 'c_' + Date.now(), name, phone, note, createdAt: new Date().toISOString() });
+      if (itemId) {
+        const bag = bags.find(b => b.id === itemId);
+        if (!bag) throw new Error('Item no longer exists — refresh admin');
+        if (bag.stock && bag.stock[size] !== undefined) bag.stock[size] = Math.max(0, bag.stock[size] - qty);
+        if (!bag.sales) bag.sales = [];
+        bag.sales.push({ size, qty, salePrice: salePrice || bag.price, buyerName: name, buyerPhone: phone, notes: note, soldAt: new Date().toISOString() });
+      }
+    });
+    closeAddClient();
+    renderClients(); renderDashboard(); renderInventory(); renderList();
+    showToast(itemId ? 'Client saved + sale recorded.' : 'Client saved.');
+  } catch (e) { showToast('Save failed: ' + e.message); }
+  finally { btn.disabled = false; }
+});
+window.removeClient = async (id) => {
+  if (!await confirmAction('Remove this client from your list? Their past sales (if any) stay in your records.', 'Remove')) return;
+  try {
+    await apiMutateAndPublish(() => { clients = (clients || []).filter(c => c.id !== id); });
+    renderClients();
+    showToast('Client removed.');
+  } catch (e) { showToast('Remove failed: ' + e.message); }
+};
+document.getElementById('clientsSearch')?.addEventListener('input', e => { clientsQuery = e.target.value.trim(); renderClients(); });
+document.getElementById('clientsSort')?.addEventListener('change', e => { clientsSort = e.target.value; renderClients(); });
+// "NEW" badge on the Clients nav link — kept permanently visible (owner asked
+// for it to always show). No auto-dismiss; the badge renders from the HTML/CSS.
+
 // ====== WHATSAPP BROADCAST ======
 let broadcastSelectedIds = [];
 let broadcastRecipientsState = {};
@@ -1706,6 +1931,7 @@ async function init() {
   renderInventory();
   renderTrash();
   renderInsights();
+  renderClients();
   renderBroadcastSelected();
   renderBroadcastPicker();
   renderBroadcastRecipients();
