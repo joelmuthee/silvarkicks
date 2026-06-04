@@ -567,7 +567,8 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
     const o = document.createElement('div');
     o.id = 'suspendedOverlay';
     o.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#16110c;color:#eee;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px;font-family:system-ui,-apple-system,sans-serif;';
-    o.innerHTML = '<h1 style="font-weight:600;font-size:clamp(26px,5vw,40px);margin:0 0 14px;">This page is temporarily unavailable</h1>'
+    o.innerHTML = '<img src="images/logo-suspended.png" alt="Silvarkicks" style="width:min(280px,72vw);background:#E5F2FA;padding:14px 18px;border-radius:18px;margin-bottom:28px;">'
+      + '<h1 style="font-weight:600;font-size:clamp(26px,5vw,40px);margin:0 0 14px;">This page is temporarily unavailable</h1>'
       + '<p style="font-size:16px;max-width:440px;line-height:1.6;opacity:0.8;margin:0;">Please check back soon.</p>';
     document.body.appendChild(o);
   }
