@@ -373,6 +373,12 @@ img { max-width: 100%; display: block; }
 .sort-select { padding: 10px 36px 10px 14px; border: 1px solid var(--line); border-radius: 99px; background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23666'/></svg>") no-repeat right 14px center; appearance: none; -webkit-appearance: none; font-family: inherit; font-size: 14px; color: var(--ink); cursor: pointer; }
 .sort-select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 4px rgba(110,244,7,0.18); }
 
+/* Category + size filter dropdowns (compact, replaces long pill rows) */
+.filter-drop { flex: 0 1 auto; min-width: 0; }
+.filter-select { width: 100%; max-width: 100%; }
+@media (max-width: 600px) { .filter-drop { flex: 1 1 calc(50% - 5px); } }
+
+
 /* ===== NEW badge ===== */
 .badge-new { position: absolute; top: 10px; left: 10px; background: linear-gradient(135deg, var(--gold), var(--gold-deep)); color: var(--ink); font-size: 10px; font-weight: 800; letter-spacing: 0.16em; padding: 4px 9px; border-radius: 4px; z-index: 2; box-shadow: 0 2px 6px rgba(86,194,0,0.4); }
 
