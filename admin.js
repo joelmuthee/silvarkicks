@@ -1753,7 +1753,7 @@ window.remindDebt = phone => {
   if (!c) return;
   const first = (c.name || 'there').split(' ')[0];
   const items = c.lines.map(l => `• ${l.bagName}${l.size ? ' (' + l.size + ')' : ''} (taken ${fmtDate(l.at)}): balance ${fmtKsh(l.balance)}`).join('\n');
-  const msg = `Hi ${first}, hope you're well. A friendly reminder about your balance with Silvarkicks:\n${items}\nTotal still owing: ${fmtKsh(c.owed)}. You can pay by M-Pesa or cash whenever you're ready. Thank you.`;
+  const msg = `Hi ${first}, hope you're well. A friendly reminder about your balance with Silvarkicks:\n${items}\nTotal still owing: ${fmtKsh(c.owed)}. You can pay via M-Pesa whenever you're ready. Thank you.`;
   window.open(`https://wa.me/${clientWaPhone(phone)}?text=${encodeURIComponent(msg)}`, '_blank');
 };
 
