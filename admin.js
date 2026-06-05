@@ -1624,7 +1624,7 @@ function owedLedger() {
       let c = map.get(key);
       if (!c) { c = { phone: hasPhone ? phone : '', name: '', owed: 0, lines: [], _lastAt: 0 }; map.set(key, c); }
       c.owed += bal;
-      c.lines.push({ bagId: bag.id, soldAt: s.soldAt, bagName: bag.name, size: s.size || '', total: saleTotal(bag, s), balance: bal, at: s.soldAt });
+      c.lines.push({ bagId: bag.id, soldAt: s.soldAt, bagName: bag.name, size: s.size || '', total: saleTotal(bag, s), balance: bal, at: s.soldAt, notes: s.notes || '' });
       const at = new Date(s.soldAt || 0).getTime();
       if (s.buyerName && at >= c._lastAt) { c.name = s.buyerName; c._lastAt = at; }
       else if (!c.name && s.buyerName) c.name = s.buyerName;
@@ -1664,7 +1664,7 @@ function renderOwed() {
   if (!rows.length) { listEl.innerHTML = '<p style="font-size:13px;color:#999;padding:14px;">No customers match your search.</p>'; return; }
   listEl.innerHTML = rows.map(c => {
     const items = c.lines.slice().sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
-      .map(l => `<span class="client-item">${escapeHtml(l.bagName)}${l.size ? ' · ' + escapeHtml(l.size) : ''} · owes ${fmtKsh(l.balance)} of ${fmtKsh(l.total)} · taken ${fmtDate(l.at)} (${relTime(l.at)})</span>`).join('');
+      .map(l => `<span class="client-item">${escapeHtml(l.bagName)}${l.size ? ' · ' + escapeHtml(l.size) : ''} · owes ${fmtKsh(l.balance)} of ${fmtKsh(l.total)} · taken ${fmtDate(l.at)} (${relTime(l.at)})${l.notes ? ` · <em>${escapeHtml(l.notes)}</em>` : ''}</span>`).join('');
     const noPhone = !c.phone;
     const title = noPhone ? 'Buyer not saved' : (c.name || 'Unnamed customer');
     const sub = noPhone
@@ -2347,7 +2347,7 @@ function posSelectItem(id) {
 }
 function posReset() {
   posItemId = ''; posPayMethod = 'cash';
-  ['posItemSearch', 'posBuyerName', 'posBuyerPhone', 'posPaid'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
+  ['posItemSearch', 'posBuyerName', 'posBuyerPhone', 'posPaid', 'posNotes'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
   document.getElementById('posItemResults').style.display = 'none';
   document.getElementById('posChosen').style.display = 'none';
   document.getElementById('posSaleFields').style.display = 'none';
@@ -2405,6 +2405,7 @@ async function recordPosSale() {
   const priceRaw = parseInt(document.getElementById('posPrice').value, 10);
   const name = document.getElementById('posBuyerName').value.trim();
   const phone = document.getElementById('posBuyerPhone').value.trim().replace(/[^0-9+]/g, '');
+  const note = document.getElementById('posNotes').value.trim();
   const soldAt = soldAtFromDateInput(document.getElementById('posDate').value);
   const amount = isNaN(priceRaw) ? (bags.find(b => b.id === targetId)?.price || 0) : priceRaw;
   const total = amount * qty;
@@ -2421,7 +2422,7 @@ async function recordPosSale() {
       const bag = bags.find(b => b.id === targetId); if (!bag) throw new Error('Item no longer exists — refresh admin');
       if (bag.stock && bag.stock[size] !== undefined) bag.stock[size] = Math.max(0, bag.stock[size] - qty);
       if (!bag.sales) bag.sales = [];
-      bag.sales.push({ size, qty, salePrice: amount, amountPaid, paymentMethod: posPayMethod, channel: 'shop', buyerName: name, buyerPhone: phone, notes: '', soldAt });
+      bag.sales.push({ size, qty, salePrice: amount, amountPaid, paymentMethod: posPayMethod, channel: 'shop', buyerName: name, buyerPhone: phone, notes: note, soldAt });
       soldName = bag.name;
       if (phone.replace(/[^0-9]/g, '').length >= 9) {
         if (!Array.isArray(clients)) clients = [];
