@@ -1724,10 +1724,15 @@ body[style*="background: #f5f5f7"] {
 .client-note { font-size: 12.5px; color: var(--ink-soft, #6b5b48); margin-top: 5px; font-style: italic; }
 /* Add-client item autocomplete */
 .client-item-results { border: 1px solid var(--line, #e6dcc8); border-radius: 10px; max-height: 220px; overflow-y: auto; margin-top: 6px; background: #fff; }
-.client-item-opt { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 12px; border: 0; border-bottom: 1px solid #f1ead9; background: #fff; font-size: 14px; color: var(--ink, #2a1d10); cursor: pointer; }
+.client-item-opt { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; padding: 9px 12px; border: 0; border-bottom: 1px solid #f1ead9; background: #fff; color: var(--ink, #2a1d10); cursor: pointer; }
 .client-item-opt:last-child { border-bottom: 0; }
 .client-item-opt:hover, .client-item-opt:active { background: #faf6ec; }
-.client-item-opt span { color: #9a8e78; font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+.opt-thumb { width: 42px; height: 42px; flex: 0 0 auto; object-fit: cover; border-radius: 8px; background: #f3ead6; border: 1px solid #ece0c6; }
+.opt-thumb-none { display: inline-flex; align-items: center; justify-content: center; font-size: 20px; }
+.opt-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
+.opt-name { font-size: 14px; font-weight: 600; color: var(--ink, #2a1d10); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opt-sub { font-size: 11.5px; color: #9a8e78; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.opt-meta { flex: 0 0 auto; color: #9a8e78; font-size: 12px; white-space: nowrap; }
 .client-item-empty { padding: 10px 12px; font-size: 13px; color: #999; }
 .client-item-chosen { margin-top: 8px; font-size: 13px; color: var(--ink-soft, #6b5b48); }
 .client-item-chosen button { background: none; border: 0; color: #b00020; font-size: 13px; cursor: pointer; text-decoration: underline; padding: 0; }

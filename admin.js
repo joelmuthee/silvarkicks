@@ -1467,6 +1467,20 @@ window.clientMessage = phone => {
   window.open(`https://wa.me/${clientWaPhone(phone)}?text=${encodeURIComponent(msg)}`, '_blank');
 };
 // Manually add / remove a client (server-synced via the clients[] list).
+// Shared search-result row: thumbnail + name + category/sizes + stock/price.
+// Used by the POS item picker and the Clients "item bought" autocomplete so
+// look-alike items (two "Nike Air Force") can be told apart by their photo.
+function itemOptHTML(b) {
+  const stockKeys = Object.keys(b.stock || {});
+  const units = Object.values(b.stock || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+  const meta = stockKeys.length ? `${units} in stock` : fmtKsh(b.price);
+  const sizesIn = Object.entries(b.stock || {}).filter(([, q]) => q > 0).map(([s]) => s);
+  const sub = [b.category, sizesIn.length ? 'sizes ' + sizesIn.join(', ') : ''].filter(Boolean).join(' · ');
+  const thumb = b.image
+    ? `<img class="opt-thumb" src="${escapeHtml(b.image)}" alt="" loading="lazy">`
+    : `<span class="opt-thumb opt-thumb-none">👟</span>`;
+  return `<button type="button" class="client-item-opt" data-id="${b.id}">${thumb}<span class="opt-main"><span class="opt-name">${escapeHtml(b.name)}</span>${sub ? `<span class="opt-sub">${escapeHtml(sub)}</span>` : ''}</span><span class="opt-meta">${meta}</span></button>`;
+}
 // ----- "Item bought" autocomplete: type → tappable matches → select one -----
 let acItemId = ''; // selected item id ('' = none / contact-only)
 function acRenderResults(q) {
@@ -1475,11 +1489,7 @@ function acRenderResults(q) {
   if (!query) { box.style.display = 'none'; box.innerHTML = ''; return; }
   const matches = bags.filter(b => (b.name || '').toLowerCase().includes(query)).slice(0, 12);
   box.innerHTML = matches.length
-    ? matches.map(b => {
-        const units = Object.values(b.stock || {}).reduce((s, n) => s + (Number(n) || 0), 0);
-        const meta = Object.keys(b.stock || {}).length ? `${units} in stock` : fmtKsh(b.price);
-        return `<button type="button" class="client-item-opt" data-id="${b.id}">${escapeHtml(b.name)}<span>${meta}</span></button>`;
-      }).join('')
+    ? matches.map(itemOptHTML).join('')
     : '<div class="client-item-empty">No items match.</div>';
   box.style.display = '';
 }
@@ -2324,7 +2334,7 @@ function posRenderResults(q) {
   if (!query) { box.style.display = 'none'; box.innerHTML = ''; return; }
   const matches = bags.filter(b => (b.name || '').toLowerCase().includes(query)).slice(0, 12);
   box.innerHTML = matches.length
-    ? matches.map(b => { const units = Object.values(b.stock || {}).reduce((s, n) => s + (Number(n) || 0), 0); const meta = Object.keys(b.stock || {}).length ? `${units} in stock` : fmtKsh(b.price); return `<button type="button" class="client-item-opt" data-id="${b.id}">${escapeHtml(b.name)}<span>${meta}</span></button>`; }).join('')
+    ? matches.map(itemOptHTML).join('')
     : '<div class="client-item-empty">No items match.</div>';
   box.style.display = '';
 }
