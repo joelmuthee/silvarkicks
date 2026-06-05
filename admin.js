@@ -778,6 +778,7 @@ function openSaleModal(id) {
   salePriceInput.value = bag.price;
   document.getElementById('salePaidInput').value = '';
   document.getElementById('salePaidHint').style.display = 'none';
+  document.getElementById('salePaidNone').classList.remove('active');
   document.getElementById('saleDateInput').value = todayInputValue();
   buyerName.value = '';
   buyerPhone.value = '';
@@ -1755,17 +1756,24 @@ function paidHint(priceEl, qtyEl, paidEl, hintEl) {
   hintEl.style.display = bal > 0 ? '' : 'none';
   if (bal > 0) hintEl.textContent = `Balance owing: ${fmtKsh(bal)}`;
 }
+// Keep the live balance hint and the "Not paid yet" pill in sync with the paid box.
+function syncPaid(priceId, qtyId, paidId, hintId, btnId) {
+  const paidEl = document.getElementById(paidId);
+  paidHint(document.getElementById(priceId), document.getElementById(qtyId), paidEl, document.getElementById(hintId));
+  const btn = document.getElementById(btnId);
+  if (btn) btn.classList.toggle('active', (paidEl.value || '').trim() === '0');
+}
 ['salePaidInput', 'salePriceInput', 'saleQtyInput'].forEach(id => document.getElementById(id)?.addEventListener('input',
-  () => paidHint(salePriceInput, saleQtyInput, document.getElementById('salePaidInput'), document.getElementById('salePaidHint'))));
+  () => syncPaid('salePriceInput', 'saleQtyInput', 'salePaidInput', 'salePaidHint', 'salePaidNone')));
 ['posPaid', 'posPrice', 'posQty'].forEach(id => document.getElementById(id)?.addEventListener('input',
-  () => paidHint(document.getElementById('posPrice'), document.getElementById('posQty'), document.getElementById('posPaid'), document.getElementById('posPaidHint'))));
+  () => syncPaid('posPrice', 'posQty', 'posPaid', 'posPaidHint', 'posPaidNone')));
 document.getElementById('salePaidNone')?.addEventListener('click', () => {
   document.getElementById('salePaidInput').value = '0';
-  paidHint(salePriceInput, saleQtyInput, document.getElementById('salePaidInput'), document.getElementById('salePaidHint'));
+  syncPaid('salePriceInput', 'saleQtyInput', 'salePaidInput', 'salePaidHint', 'salePaidNone');
 });
 document.getElementById('posPaidNone')?.addEventListener('click', () => {
   document.getElementById('posPaid').value = '0';
-  paidHint(document.getElementById('posPrice'), document.getElementById('posQty'), document.getElementById('posPaid'), document.getElementById('posPaidHint'));
+  syncPaid('posPrice', 'posQty', 'posPaid', 'posPaidHint', 'posPaidNone');
 });
 
 // ====== WHATSAPP BROADCAST ======
@@ -2346,6 +2354,7 @@ function posReset() {
   document.getElementById('posReceiptPanel').style.display = 'none';
   document.getElementById('posCustomerFields').style.display = '';
   document.getElementById('posPaidHint').style.display = 'none';
+  document.getElementById('posPaidNone').classList.remove('active');
   document.getElementById('posDate').value = todayInputValue();
   document.querySelectorAll('#posPay .pos-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === 'cash'));
 }
