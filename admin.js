@@ -1745,6 +1745,14 @@ function paidHint(priceEl, qtyEl, paidEl, hintEl) {
   () => paidHint(salePriceInput, saleQtyInput, document.getElementById('salePaidInput'), document.getElementById('salePaidHint'))));
 ['posPaid', 'posPrice', 'posQty'].forEach(id => document.getElementById(id)?.addEventListener('input',
   () => paidHint(document.getElementById('posPrice'), document.getElementById('posQty'), document.getElementById('posPaid'), document.getElementById('posPaidHint'))));
+document.getElementById('salePaidNone')?.addEventListener('click', () => {
+  document.getElementById('salePaidInput').value = '0';
+  paidHint(salePriceInput, saleQtyInput, document.getElementById('salePaidInput'), document.getElementById('salePaidHint'));
+});
+document.getElementById('posPaidNone')?.addEventListener('click', () => {
+  document.getElementById('posPaid').value = '0';
+  paidHint(document.getElementById('posPrice'), document.getElementById('posQty'), document.getElementById('posPaid'), document.getElementById('posPaidHint'));
+});
 
 // ====== WHATSAPP BROADCAST ======
 let broadcastSelectedIds = [];

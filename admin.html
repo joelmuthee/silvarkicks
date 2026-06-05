@@ -100,7 +100,10 @@
         </div>
         <div class="field">
           <label>Amount paid now (Ksh) <small style="font-weight:400;color:#999;">leave blank if paid in full</small></label>
-          <input id="posPaid" type="number" min="0" step="50" placeholder="Paid in full">
+          <div class="paid-row">
+            <input id="posPaid" type="number" min="0" step="50" placeholder="Paid in full">
+            <button type="button" class="btn-paid-none" id="posPaidNone">Not paid yet</button>
+          </div>
           <p class="paid-hint" id="posPaidHint" style="display:none;"></p>
         </div>
         <div class="field">
@@ -412,7 +415,10 @@
 
     <div class="field">
       <label>Amount paid now (Ksh) <small style="font-weight:400;color:#999;">leave blank if paid in full</small></label>
-      <input id="salePaidInput" type="number" min="0" step="50" placeholder="Paid in full">
+      <div class="paid-row">
+        <input id="salePaidInput" type="number" min="0" step="50" placeholder="Paid in full">
+        <button type="button" class="btn-paid-none" id="salePaidNone">Not paid yet</button>
+      </div>
       <p class="paid-hint" id="salePaidHint" style="display:none;"></p>
     </div>
 

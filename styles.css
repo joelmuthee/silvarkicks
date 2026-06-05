@@ -1754,6 +1754,14 @@ body[style*="background: #f5f5f7"] {
   background: #fff0ee; color: #b3301f; border-color: #f0c2c2;
 }
 .paid-hint { font-size: 12px; color: #b3301f; margin: 5px 0 0; font-weight: 600; }
+.paid-row { display: flex; gap: 8px; align-items: stretch; }
+.paid-row input { flex: 1; min-width: 0; }
+.btn-paid-none {
+  flex: 0 0 auto; cursor: pointer; white-space: nowrap;
+  font-size: 13px; font-weight: 600; padding: 0 14px; border-radius: 8px;
+  color: #b3301f; background: #fff5f5; border: 1px solid #f0c2c2;
+}
+.btn-paid-none:hover { background: #ffe8e6; }
 .clients-controls #owedSearch {
   flex: 1; min-width: 180px;
   padding: 10px 14px; border: 1px solid var(--line, #e6dcc8); border-radius: 10px;
