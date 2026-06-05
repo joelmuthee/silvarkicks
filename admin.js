@@ -778,6 +778,7 @@ function openSaleModal(id) {
   salePriceInput.value = bag.price;
   document.getElementById('salePaidInput').value = '';
   document.getElementById('salePaidHint').style.display = 'none';
+  document.getElementById('saleDateInput').value = todayInputValue();
   buyerName.value = '';
   buyerPhone.value = '';
   buyerNotes.value = '';
@@ -810,7 +811,7 @@ document.getElementById('saleSaveBtn').addEventListener('click', async () => {
     buyerName: buyerName.value.trim(),
     buyerPhone: buyerPhone.value.trim(),
     notes: buyerNotes.value.trim(),
-    soldAt: new Date().toISOString(),
+    soldAt: soldAtFromDateInput(document.getElementById('saleDateInput').value),
   };
   closeSaleModal();
   try {
@@ -909,6 +910,7 @@ function openEditSale(bagId, soldAt) {
   document.getElementById('editSaleSize').value = s.size || '';
   document.getElementById('editSaleQty').value = s.qty || 1;
   document.getElementById('editSalePrice').value = (s.salePrice != null ? s.salePrice : bag.price) || 0;
+  document.getElementById('editSaleDate').value = s.soldAt ? new Date(s.soldAt).toISOString().slice(0, 10) : todayInputValue();
   document.getElementById('editBuyerName').value = s.buyerName || '';
   document.getElementById('editBuyerPhone').value = s.buyerPhone || '';
   document.getElementById('editBuyerNotes').value = s.notes || '';
@@ -927,6 +929,7 @@ document.getElementById('editSaleSaveBtn').addEventListener('click', async () =>
   const newBuyerName = document.getElementById('editBuyerName').value.trim();
   const newBuyerPhone = document.getElementById('editBuyerPhone').value.trim();
   const newNotes = document.getElementById('editBuyerNotes').value.trim();
+  const formDate = document.getElementById('editSaleDate').value;
   closeEditSale();
   try {
     await apiMutateAndPublish(() => {
@@ -947,6 +950,9 @@ document.getElementById('editSaleSaveBtn').addEventListener('click', async () =>
       s.buyerName = newBuyerName;
       s.buyerPhone = newBuyerPhone;
       s.notes = newNotes;
+      // Only restamp the date if the owner actually changed the day.
+      const curDateStr = s.soldAt ? new Date(s.soldAt).toISOString().slice(0, 10) : '';
+      if (formDate && formDate !== curDateStr) s.soldAt = new Date(formDate + 'T12:00:00').toISOString();
     });
     renderList();
     renderDashboard();
@@ -998,6 +1004,14 @@ function relTime(iso) {
   if (days < 30) return days + 'd ago';
   return new Date(iso).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' });
 }
+
+// Sale-date helpers — let the owner back-date a credit sale (shoes taken weeks ago).
+function todayInputValue() { const d = new Date(); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+function soldAtFromDateInput(val) {
+  if (!val || val === todayInputValue()) return new Date().toISOString(); // today → keep the real time
+  return new Date(val + 'T12:00:00').toISOString();                       // back-dated → local noon avoids a day shift
+}
+function fmtDate(iso) { return new Date(iso).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }); }
 
 // Best-effort "added to the website" timestamp: explicit createdAt, else the IG
 // post date (takenAt; epoch-seconds or ISO), else the millis baked into a manual id.
@@ -1635,7 +1649,7 @@ function renderOwed() {
   if (kpi) kpi.innerHTML = `
     <div class="inv-kpi danger"><div class="inv-kpi-label">Total owed to you</div><div class="inv-kpi-val">${fmtKsh(totalOwed)}</div><div class="inv-kpi-sub">across ${ledger.length} customer${ledger.length === 1 ? '' : 's'}</div></div>
     <div class="inv-kpi"><div class="inv-kpi-label">Customers owing</div><div class="inv-kpi-val">${ledger.length}</div><div class="inv-kpi-sub">${withPhone.length} with a phone saved</div></div>
-    <div class="inv-kpi"><div class="inv-kpi-label">Oldest balance</div><div class="inv-kpi-val">${oldest ? relTime(new Date(oldest).toISOString()) : '—'}</div><div class="inv-kpi-sub">since the shoes were taken</div></div>
+    <div class="inv-kpi"><div class="inv-kpi-label">Oldest balance</div><div class="inv-kpi-val">${oldest ? relTime(new Date(oldest).toISOString()) : '—'}</div><div class="inv-kpi-sub">${oldest ? 'taken ' + fmtDate(new Date(oldest).toISOString()) : 'since the shoes were taken'}</div></div>
   `;
 
   if (!ledger.length) {
@@ -1649,7 +1663,7 @@ function renderOwed() {
   if (!rows.length) { listEl.innerHTML = '<p style="font-size:13px;color:#999;padding:14px;">No customers match your search.</p>'; return; }
   listEl.innerHTML = rows.map(c => {
     const items = c.lines.slice().sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
-      .map(l => `<span class="client-item">${escapeHtml(l.bagName)}${l.size ? ' · ' + escapeHtml(l.size) : ''} · owes ${fmtKsh(l.balance)} of ${fmtKsh(l.total)} · ${relTime(l.at)}</span>`).join('');
+      .map(l => `<span class="client-item">${escapeHtml(l.bagName)}${l.size ? ' · ' + escapeHtml(l.size) : ''} · owes ${fmtKsh(l.balance)} of ${fmtKsh(l.total)} · taken ${fmtDate(l.at)} (${relTime(l.at)})</span>`).join('');
     const noPhone = !c.phone;
     const title = noPhone ? 'Buyer not saved' : (c.name || 'Unnamed customer');
     const sub = noPhone
@@ -1727,7 +1741,7 @@ window.remindDebt = phone => {
   const c = owedLedger().find(x => x.phone === phone);
   if (!c) return;
   const first = (c.name || 'there').split(' ')[0];
-  const items = c.lines.map(l => `• ${l.bagName}${l.size ? ' (' + l.size + ')' : ''}: balance ${fmtKsh(l.balance)}`).join('\n');
+  const items = c.lines.map(l => `• ${l.bagName}${l.size ? ' (' + l.size + ')' : ''} (taken ${fmtDate(l.at)}): balance ${fmtKsh(l.balance)}`).join('\n');
   const msg = `Hi ${first}, hope you're well. A friendly reminder about your balance with Silvarkicks:\n${items}\nTotal still owing: ${fmtKsh(c.owed)}. You can pay by M-Pesa or cash whenever you're ready. Thank you.`;
   window.open(`https://wa.me/${clientWaPhone(phone)}?text=${encodeURIComponent(msg)}`, '_blank');
 };
@@ -2317,6 +2331,7 @@ function posSelectItem(id) {
   else { const o = document.createElement('option'); o.value = 'One size'; o.textContent = 'One size'; sizeSel.appendChild(o); }
   document.getElementById('posQty').value = 1;
   document.getElementById('posPrice').value = (bag.salePrice > 0 && bag.salePrice < bag.price) ? bag.salePrice : (bag.price || '');
+  document.getElementById('posDate').value = todayInputValue();
   document.getElementById('posChosen').innerHTML = `Selling <strong>${escapeHtml(bag.name)}</strong> · <button type="button" id="posClearItem">change</button>`;
   document.getElementById('posChosen').style.display = '';
   document.getElementById('posSaleFields').style.display = '';
@@ -2331,6 +2346,7 @@ function posReset() {
   document.getElementById('posReceiptPanel').style.display = 'none';
   document.getElementById('posCustomerFields').style.display = '';
   document.getElementById('posPaidHint').style.display = 'none';
+  document.getElementById('posDate').value = todayInputValue();
   document.querySelectorAll('#posPay .pos-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === 'cash'));
 }
 function posReceiptText(s) {
@@ -2380,7 +2396,7 @@ async function recordPosSale() {
   const priceRaw = parseInt(document.getElementById('posPrice').value, 10);
   const name = document.getElementById('posBuyerName').value.trim();
   const phone = document.getElementById('posBuyerPhone').value.trim().replace(/[^0-9+]/g, '');
-  const soldAt = new Date().toISOString();
+  const soldAt = soldAtFromDateInput(document.getElementById('posDate').value);
   const amount = isNaN(priceRaw) ? (bags.find(b => b.id === targetId)?.price || 0) : priceRaw;
   const total = amount * qty;
   const paidRaw = (document.getElementById('posPaid').value || '').trim();

@@ -107,6 +107,10 @@
           <p class="paid-hint" id="posPaidHint" style="display:none;"></p>
         </div>
         <div class="field">
+          <label>Sale date <small style="font-weight:400;color:#999;">change it if the shoes were taken earlier</small></label>
+          <input id="posDate" type="date">
+        </div>
+        <div class="field">
           <label>Payment</label>
           <div class="pos-pay" id="posPay">
             <button type="button" class="pos-pay-btn active" data-pay="cash">💵 Cash</button>
@@ -414,6 +418,11 @@
     </div>
 
     <div class="field">
+      <label>Sale date <small style="font-weight:400;color:#999;">change it if the shoes were taken earlier</small></label>
+      <input id="saleDateInput" type="date">
+    </div>
+
+    <div class="field">
       <label>Amount paid now (Ksh) <small style="font-weight:400;color:#999;">leave blank if paid in full</small></label>
       <div class="paid-row">
         <input id="salePaidInput" type="number" min="0" step="50" placeholder="Paid in full">
@@ -469,6 +478,10 @@
     <div class="field">
       <label>Sale price (Ksh)</label>
       <input id="editSalePrice" type="number" min="0" step="50">
+    </div>
+    <div class="field">
+      <label>Sale date</label>
+      <input id="editSaleDate" type="date">
     </div>
     <div class="field">
       <label>Buyer name <small style="font-weight:400;color:#999;">optional</small></label>
