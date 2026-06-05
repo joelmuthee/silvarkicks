@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0a0a0a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260605tot">
+<link rel="stylesheet" href="styles.css?v=20260605cart">
 <script src="https://www.google.com/recaptcha/enterprise.js?render=6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX" async defer></script>
 </head>
 <body style="background:#f5f5f7;">
@@ -99,13 +99,28 @@
           <div class="field"><label>Price (Ksh)</label><input id="posPrice" type="number" min="0"></div>
         </div>
         <div class="field">
-          <label>Amount paid now (Ksh) <small style="font-weight:400;color:#999;">leave blank if paid in full</small></label>
+          <label>Amount paid for this item (Ksh) <small style="font-weight:400;color:#999;">leave blank if paid in full</small></label>
           <div class="paid-row">
             <input id="posPaid" type="number" min="0" step="50" placeholder="Paid in full">
             <button type="button" class="btn-paid-none" id="posPaidNone">Not paid yet</button>
           </div>
           <p class="paid-hint" id="posPaidHint" style="display:none;"></p>
         </div>
+        <div class="admin-actions">
+          <button class="btn-admin gold" id="posAddBtn" type="button">+ Add to basket</button>
+          <button class="btn-admin" id="posCancelItemBtn" type="button">Cancel item</button>
+        </div>
+      </div>
+
+      <!-- Basket (one or more items in this sale) -->
+      <div id="posCart" class="pos-cart" style="display:none;">
+        <div class="pos-cart-head">Basket</div>
+        <div id="posCartList" class="pos-cart-list"></div>
+        <div id="posCartTotals" class="pos-cart-totals"></div>
+      </div>
+
+      <!-- Checkout — shared across every item in the basket -->
+      <div id="posCheckout" style="display:none;">
         <div class="field">
           <label>Sale date <small style="font-weight:400;color:#999;">change it if the shoes were taken earlier</small></label>
           <input id="posDate" type="date">
@@ -130,7 +145,7 @@
         </div>
         <div class="admin-actions">
           <button class="btn-admin primary" id="posRecordBtn" type="button">Record sale</button>
-          <button class="btn-admin" id="posCancelBtn" type="button">Clear</button>
+          <button class="btn-admin" id="posCancelBtn" type="button">Clear basket</button>
         </div>
       </div>
     </div>
@@ -461,6 +476,9 @@
       <button class="btn-admin" id="saleSkipBtn">Skip · just mark sold</button>
       <button class="btn-admin danger" id="saleCancelBtn">Cancel</button>
     </div>
+    <div class="admin-actions" style="margin-top:8px;">
+      <button class="btn-admin" id="saleAddBasketBtn" type="button" style="width:100%;">🛒 Selling more than one item? Add to basket</button>
+    </div>
   </div>
 </div>
 
@@ -598,6 +616,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=20260605tot"></script>
+<script src="admin.js?v=20260605cart"></script>
 </body>
 </html>
