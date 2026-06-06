@@ -44,7 +44,14 @@ document.getElementById('logoutBtn').addEventListener('click', () => {
 });
 
 // ====== API ======
+// Billing kill-switch: when the store is suspended the owner can still VIEW the
+// admin but every write is frozen. The worker is the real gate (403); these
+// client guards surface a clean message instead of a raw error. `accountSuspended`
+// is set by loadData() from /api/bags.
+const SUSPENDED_MSG = 'Your store is offline. Contact Essence Automations to restore it before making changes.';
+
 async function apiUploadImage(base64, ext) {
+  if (accountSuspended) throw new Error(SUSPENDED_MSG);
   const res = await fetch(`${API_BASE}/api/image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ADMIN_TOKEN}` },
@@ -74,6 +81,7 @@ async function apiPublish() {
 // INSIDE the callback — anything captured before the refetch is stale. A
 // mutator may throw to abort the save.
 async function apiMutateAndPublish(mutate) {
+  if (accountSuspended) throw new Error(SUSPENDED_MSG);
   const res = await fetch(`${API_BASE}/api/bags?_=${Date.now()}`, { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } });
   if (!res.ok) throw new Error(`Failed to load fresh data: ${res.status}`);
   const json = await res.json();
@@ -105,7 +113,7 @@ function renderSuspendedBanner() {
     b.style.cssText = 'position:sticky;top:0;z-index:9000;background:#b00020;color:#fff;padding:12px 16px;text-align:center;font-size:14px;font-weight:600;line-height:1.4;';
     document.body.prepend(b);
   }
-  b.innerHTML = 'Your store is currently offline because payment is overdue. Please contact Essence Automations to restore it. <a href="https://wa.me/254720615606" style="color:#fff;text-decoration:underline;">Message us</a>';
+  b.innerHTML = 'Your store is currently offline. You can still view your inventory and sales, but selling, adding stock, syncing from Instagram and other changes are paused until it\'s restored. Please contact Essence Automations to restore it. <a href="https://wa.me/254720615606" style="color:#fff;text-decoration:underline;">Message us</a>';
 }
 
 // ====== HELPERS ======
@@ -2118,6 +2126,7 @@ igSyncCancelBtn?.addEventListener('click', resetIgSync);
 igSyncCommitBtn?.addEventListener('click', commitIgSync);
 
 async function checkForNewIgPosts() {
+  if (accountSuspended) { igSyncStatus.textContent = '✗ ' + SUSPENDED_MSG; return; }
   igSyncCheckBtn.disabled = true;
   igSyncStatus.textContent = 'Checking Instagram…';
   igSyncListEl.innerHTML = '';
@@ -2179,6 +2188,7 @@ function resetIgSync() {
 }
 
 async function commitIgSync() {
+  if (accountSuspended) { igSyncStatus.textContent = '✗ ' + SUSPENDED_MSG; return; }
   const picks = [];
   igSyncCandidates.forEach((it, i) => {
     const cb = igSyncListEl.querySelector(`[data-ig-pick="${i}"]`);
@@ -2285,6 +2295,7 @@ async function renderInsights() {
 const insightsResetBtn = document.getElementById('insightsResetBtn');
 if (insightsResetBtn) {
   insightsResetBtn.addEventListener('click', async () => {
+    if (accountSuspended) { showToast(SUSPENDED_MSG); return; }
     if (!await confirmAction('Reset Insights for the whole shop? This clears the site-wide totals from every device and cannot be undone.', 'Reset')) return;
     try {
       await fetch(`${API_BASE}/api/insights-reset`, { method: 'POST', headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } });
