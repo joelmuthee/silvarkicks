@@ -2,6 +2,7 @@
 const ADMIN_PASSWORD = 'silvar123';
 const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
 const ADMIN_TOKEN = atob('b0Nxa3VCRTYybExnSnNseUtqVnZCSUtnZHRzZC1uU3RXNWtvNmQxajZJSQ==');
+const SHOP_URL = 'https://silvarkicks.essenceautomations.com'; // public storefront — used in WhatsApp messages to clients
 const SITE_URL = 'https://silvarkicks.essenceautomations.com';
 const UK_SIZE_FIXED = ['UK4','UK5','UK6','UK7','UK8','UK9','UK10','UK11','UK12','UK13'];
 
@@ -851,7 +852,7 @@ function openSaleModal(id) {
   buyerName.value = '';
   buyerPhone.value = '';
   buyerNotes.value = '';
-  document.querySelectorAll('#saleModalPay .pos-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === 'cash'));
+  document.querySelectorAll('#saleModalPay .pos-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === 'mpesa'));
   saleModal.style.display = 'flex';
   buyerName.focus();
 }
@@ -865,7 +866,7 @@ document.getElementById('saleSaveBtn').addEventListener('click', async () => {
   const size = saleSizeInput.value;
   const qty = parseInt(saleQtyInput.value, 10) || 1;
   const salePrice = parseInt(salePriceInput.value, 10) || curBag.price;
-  const payMethod = document.querySelector('#saleModalPay .pos-pay-btn.active')?.dataset.pay || 'cash';
+  const payMethod = document.querySelector('#saleModalPay .pos-pay-btn.active')?.dataset.pay || 'mpesa';
   const total = salePrice * qty;
   const paidRaw = (document.getElementById('salePaidInput').value || '').trim();
   const amountPaid = paidRaw === '' ? total : Math.min(total, Math.max(0, parseInt(paidRaw, 10) || 0));
@@ -919,7 +920,7 @@ document.getElementById('saleSkipBtn')?.addEventListener('click', async () => {
   const size = saleSizeInput.value || 'One size';
   const sale = {
     size, qty: 1, salePrice: curBag.price,
-    paymentMethod: (document.querySelector('#saleModalPay .pos-pay-btn.active')?.dataset.pay || 'cash'),
+    paymentMethod: (document.querySelector('#saleModalPay .pos-pay-btn.active')?.dataset.pay || 'mpesa'),
     channel: 'shop',
     buyerName: '', buyerPhone: '', notes: '',
     soldAt: new Date().toISOString(),
@@ -1585,7 +1586,7 @@ function renderClients() {
 window.clientMessage = phone => {
   const c = clientsLedger().find(x => x.phone === phone);
   const first = (c && c.name ? c.name : 'there').split(' ')[0];
-  const msg = `Hi ${first}! Thanks for shopping with Silvarkicks. Fresh pieces just landed. Want me to send you what's new?`;
+  const msg = `Hi ${first}! Thanks for shopping with Silvarkicks. Fresh pieces just landed. Browse what's new here: ${SHOP_URL}\n\nReply here if anything catches your eye. 👟`;
   window.open(`https://wa.me/${clientWaPhone(phone)}?text=${encodeURIComponent(msg)}`, '_blank');
 };
 // Manually add / remove a client (server-synced via the clients[] list).
@@ -1830,7 +1831,7 @@ function openPayDebt(phone) {
   document.getElementById('payDebtName').textContent = c.name || c.phone;
   document.getElementById('payDebtOwed').textContent = fmtKsh(c.owed);
   document.getElementById('payDebtAmount').value = c.owed; // default = clear the whole balance
-  document.querySelectorAll('#payDebtPay .pos-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === 'cash'));
+  document.querySelectorAll('#payDebtPay .pos-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === 'mpesa'));
   document.getElementById('payDebtModal').style.display = 'flex';
   document.getElementById('payDebtAmount').focus();
 }
@@ -1842,7 +1843,7 @@ document.getElementById('payDebtPay')?.addEventListener('click', e => { const b 
 document.getElementById('payDebtSaveBtn')?.addEventListener('click', async () => {
   const phone = payingPhone;
   const amount = parseInt(document.getElementById('payDebtAmount').value, 10);
-  const method = document.querySelector('#payDebtPay .pos-pay-btn.active')?.dataset.pay || 'cash';
+  const method = document.querySelector('#payDebtPay .pos-pay-btn.active')?.dataset.pay || 'mpesa';
   if (!phone) return;
   if (isNaN(amount) || amount <= 0) { showToast('Enter how much they paid.'); return; }
   closePayDebt();
@@ -2148,7 +2149,7 @@ function renderBroadcastStepper() {
     return;
   }
   const r = bcQueue[bcIdx];
-  const href = `https://wa.me/${r.phone}?text=${encodeURIComponent(buildBroadcastMessage(r.name))}`;
+  const href = `https://wa.me/${clientWaPhone(r.phone)}?text=${encodeURIComponent(buildBroadcastMessage(r.name))}`;
   el.style.display = 'block';
   el.innerHTML = `
     <div class="bc-step-head">Sending ${bcIdx + 1} of ${bcQueue.length}</div>
@@ -2196,7 +2197,7 @@ document.getElementById('broadcastStartBtn')?.addEventListener('click', async ()
     }
     const r = recipients[i++];
     const msg = buildBroadcastMessage(r.name);
-    window.open(`https://wa.me/${r.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    window.open(`https://wa.me/${clientWaPhone(r.phone)}?text=${encodeURIComponent(msg)}`, '_blank');
     document.getElementById('broadcastStatus').textContent = `Opening ${i} of ${recipients.length}…`;
     setTimeout(next, 700);
   }
@@ -2455,7 +2456,7 @@ function initNavScrollSpy() {
 
 // ====== POS — SELL IN STORE (counter checkout) + RECEIPTS ======
 let posItemId = '';
-let posPayMethod = 'cash';
+let posPayMethod = 'mpesa';
 let posCart = [];        // [{ bagId, name, image, size, qty, price, amountPaid }]
 let lastPosCart = null;  // the last completed basket, for the receipt
 function posWaPhone(p) { let d = String(p || '').replace(/[^0-9]/g, ''); if (d.startsWith('0')) d = '254' + d.slice(1); else if (d.startsWith('7') || d.startsWith('1')) d = '254' + d; return d; }
@@ -2543,7 +2544,7 @@ function posAddToBasket() {
   showToast('Added to basket.');
 }
 function posReset() {
-  posItemId = ''; posPayMethod = 'cash'; posCart = [];
+  posItemId = ''; posPayMethod = 'mpesa'; posCart = [];
   ['posItemSearch', 'posBuyerName', 'posBuyerPhone', 'posPaid', 'posNotes'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
   document.getElementById('posItemResults').style.display = 'none';
   document.getElementById('posChosen').style.display = 'none';
@@ -2553,7 +2554,7 @@ function posReset() {
   document.getElementById('posPaidHint').style.display = 'none';
   document.getElementById('posPaidNone').classList.remove('active');
   document.getElementById('posDate').value = todayInputValue();
-  document.querySelectorAll('#posPay .pos-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === 'cash'));
+  document.querySelectorAll('#posPay .pos-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === 'mpesa'));
   renderPosCart();
 }
 function posReceiptText(c) {
@@ -2624,7 +2625,7 @@ async function recordPosSale() {
         const norm = phone.replace(/[^0-9]/g, '');
         const existing = clients.find(c => String(c.phone).replace(/[^0-9]/g, '') === norm);
         if (existing) { if (name) existing.name = name; }
-        else clients.push({ id: 'c_' + Date.now(), name: name || '', phone, note: 'Walk-in (in-store)', createdAt: soldAt });
+        else clients.push({ id: 'c_' + Date.now(), name: name || '', phone, note, createdAt: soldAt });
       }
     });
     lastPosCart = { lines, buyerName: name, buyerPhone: phone, paymentMethod: method, soldAt, total: t.total, paid: t.paid, balance: t.balance };
