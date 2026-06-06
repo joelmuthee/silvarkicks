@@ -1586,7 +1586,7 @@ function renderClients() {
 window.clientMessage = phone => {
   const c = clientsLedger().find(x => x.phone === phone);
   const first = (c && c.name ? c.name : 'there').split(' ')[0];
-  const msg = `Hi ${first}! Thanks for shopping with Silvarkicks. Fresh pieces just landed. Browse what's new here: ${SHOP_URL}\n\nReply here if anything catches your eye. 👟`;
+  const msg = `Hi ${first}! Thanks for shopping with Silvarkicks. Fresh pieces just landed. Browse what's new here: ${SHOP_URL}\n\nSilvarkicks 👟`;
   window.open(`https://wa.me/${clientWaPhone(phone)}?text=${encodeURIComponent(msg)}`, '_blank');
 };
 // Manually add / remove a client (server-synced via the clients[] list).
@@ -2112,7 +2112,7 @@ function buildBroadcastMessage(recipientName) {
     ? '\n\n' + items.map((b, i) => `${i + 1}. *${b.name}*${b.price > 0 ? ' - ' + fmtKsh(b.price) : ''}`).join('\n')
     : '';
   const greet = recipientName ? `Hi ${recipientName.split(' ')[0]}! ` : 'Hi! ';
-  return `${greet}It's Silvarkicks Store. ${subject || 'Fresh kicks just landed.'}${itemsBlock}\n\nTap to browse: ${SITE_URL}\n\nReply here to enquire.`;
+  return `${greet}It's Silvarkicks Store. ${subject || 'Fresh kicks just landed.'}${itemsBlock}\n\nTap to browse: ${SITE_URL}\n\nSilvarkicks 👟`;
 }
 
 function renderBroadcastPreview() {
