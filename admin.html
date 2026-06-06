@@ -350,6 +350,11 @@
     </div>
 
     <div class="field">
+      <label>Buying price (Ksh) <small style="font-weight:400;color:#999;">(optional) — what you paid per unit. Never shown to buyers, just for your profit tracking.</small></label>
+      <input id="costInput" type="number" min="0" step="50" placeholder="e.g. 2000">
+    </div>
+
+    <div class="field">
       <label>Available size <small style="font-weight:400;color:#999;">thrift = one-of-one pair. Tick the pair's size and leave qty as 1, unless you actually have a second identical pair.</small></label>
 
       <div class="stock-entry-group">
@@ -616,6 +621,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=20260606suspendlock"></script>
+<script src="admin.js?v=20260606buyprice"></script>
 </body>
 </html>
