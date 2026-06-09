@@ -399,7 +399,7 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
           </div>
           <div class="card-actions">
             <a class="btn-card primary" href="${whatsappLink(item)}" target="_blank" rel="noopener" ${soldOut ? 'aria-disabled="true"' : ''}>
-              ${WA_SVG} ${soldOut ? 'Sold out' : 'Enquire'}
+              ${WA_SVG} ${soldOut ? 'Sold out' : 'Check availability'}
             </a>
             ${item.instagramUrl ? `<a class="btn-card btn-ig" href="${escapeHtml(item.instagramUrl)}" target="_blank" rel="noopener" aria-label="View on Instagram">
               ${IG_SVG} View on IG
