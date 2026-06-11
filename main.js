@@ -634,7 +634,7 @@ const API_BASE = 'https://silvarkicks-api.stawisystems.workers.dev';
   function showSuspended() {
     document.documentElement.style.overflow = 'hidden';
     const shopName = settings.shopName || 'Silvarkicks';
-    document.title = shopName + ' · Offline';
+    document.title = shopName + ' · Paused';
 
     const tagline = settings.tagline || 'Pre-loved Sneakers & Boots';
     const igHandle = (settings.instagramHandle || 'silvarkicks_store1').replace(/^@/, '');
